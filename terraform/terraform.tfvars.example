@@ -1,0 +1,55 @@
+# Terraform Variables for iTrack Production Environment
+# Rename this file to terraform.tfvars and update values as needed
+
+# AWS Configuration
+aws_region = "us-east-1"
+
+# Environment
+environment = "production"
+project_name = "itrack"
+
+# VPC Configuration
+vpc_cidr = "10.0.0.0/16"
+az_count = 3
+public_subnets = ["10.0.1.0/24", "10.0.2.0/24", "10.0.3.0/24"]
+private_subnets = ["10.0.10.0/24", "10.0.11.0/24", "10.0.12.0/24"]
+
+# Application Configuration
+app_port = 8080
+health_check_path = "/health"
+
+# Security Configuration
+allowed_ips = ["0.0.0.0/0"]  # Restrict to company IP range in production
+allowed_domains = ["example.com"] # For Cognito sign-ups
+
+# Database Configuration
+db_name = "itrack"
+db_username = "admin"
+db_password = "REPLACE_WITH_SECURE_PASSWORD" # Use environment variable in production
+db_instance_class = "db.t3.small"
+
+# ECS Configuration
+ecs_desired_count = 2
+ecs_cpu = 512
+ecs_memory = 1024
+
+# Notification
+notification_emails = ["alerts@example.com"]
+
+# DNS Configuration
+domain_names = [] # Add domain names if you have a registered domain
+acm_certificate_arn = "" # Add certificate ARN if you have one
+
+# CloudFront Cache Settings
+cloudfront_cache_settings = {
+  static = {
+    min_ttl     = 86400    # 1 day
+    default_ttl = 604800   # 1 week
+    max_ttl     = 31536000 # 1 year
+  }
+  dynamic = {
+    min_ttl     = 0
+    default_ttl = 0
+    max_ttl     = 86400    # 1 day
+  }
+}
