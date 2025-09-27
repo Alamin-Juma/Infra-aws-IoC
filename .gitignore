@@ -68,6 +68,7 @@ $RECYCLE.BIN/
 *.tfplan
 *.tfvars
 !terraform.tfvars.example
+!terraform/environments/*.tfvars
 .terraform/
 .terraform.lock.hcl
 terraform.tfstate.d/
@@ -115,8 +116,11 @@ credentials.json
 *.crt
 *.cert
 *.secret
-secrets/
+secrets.json
+secrets.yml
+secrets.yaml
 private/
+config/secrets/
 
 # Database files
 *.sqlite

@@ -29,6 +29,19 @@ provider "aws" {
   }
 }
 
+# Secondary provider for cross-region backups
+provider "aws" {
+  alias  = "backup_region"
+  region = var.cross_region_backup_region
+  default_tags {
+    tags = {
+      Project     = "iTrack"
+      Environment = var.environment
+      ManagedBy   = "Terraform"
+    }
+  }
+}
+
 # Data sources
 data "aws_availability_zones" "available" {
   state = "available"
@@ -217,4 +230,51 @@ module "route53" {
   domain_names       = var.domain_names
   cloudfront_domain  = module.cloudfront.domain_name
   cloudfront_zone_id = module.cloudfront.hosted_zone_id
+}
+
+# Secrets Manager for sensitive data
+module "secrets" {
+  source = "./modules/secrets"
+  
+  environment = var.environment
+  project_name = var.project_name
+  secrets = {
+    for k, v in var.sensitive_secrets :
+    k => {
+      description = v.description
+      secret_value = v.value
+    }
+  }
+}
+
+# WAF for API Gateway protection
+module "waf" {
+  source = "./modules/waf"
+  
+  environment        = var.environment
+  project_name       = var.project_name
+  api_gateway_arn    = module.api_gateway.api_arn
+  allowed_countries  = var.waf_allowed_countries
+  rate_limit         = var.waf_rate_limit
+  
+  depends_on = [module.api_gateway]
+}
+
+# Backup and Disaster Recovery
+module "backup" {
+  source = "./modules/backup"
+  
+  environment                   = var.environment
+  project_name                  = var.project_name
+  backup_retention_days         = var.backup_retention_days
+  enable_cross_region_backup    = var.enable_cross_region_backup
+  cross_region_backup_region    = var.cross_region_backup_region
+  rds_instance_id              = module.rds.db_instance_id
+  dynamodb_table_names         = [for table in var.dynamodb_tables : table.name]
+  
+  providers = {
+    aws.backup_region = aws.backup_region
+  }
+  
+  depends_on = [module.rds, module.dynamodb]
 }

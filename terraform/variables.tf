@@ -214,3 +214,59 @@ variable "domain_names" {
   type        = list(string)
   default     = []
 }
+
+# Backup and Disaster Recovery Variables
+variable "enable_cross_region_backup" {
+  description = "Enable cross-region backup"
+  type        = bool
+  default     = false
+}
+
+variable "cross_region_backup_region" {
+  description = "Region for cross-region backups"
+  type        = string
+  default     = "us-west-2"
+}
+
+variable "backup_retention_days" {
+  description = "Number of days to retain backups"
+  type        = number
+  default     = 30
+}
+
+# WAF Variables
+variable "waf_rate_limit" {
+  description = "Rate limit per 5-minute window for WAF"
+  type        = number
+  default     = 10000
+}
+
+variable "waf_allowed_countries" {
+  description = "List of allowed country codes for WAF"
+  type        = list(string)
+  default     = ["US", "CA", "GB", "AU"]
+}
+
+# Secrets Manager Variables
+variable "sensitive_secrets" {
+  description = "Sensitive secrets to store in AWS Secrets Manager"
+  type = map(object({
+    description = string
+    value       = string
+  }))
+  sensitive = true
+  default = {
+    db_password = {
+      description = "RDS database password"
+      value       = "changeme"
+    }
+    jwt_secret = {
+      description = "JWT secret for authentication"
+      value       = "changeme"
+    }
+    api_key = {
+      description = "External API key"
+      value       = "changeme"
+    }
+  }
+}
