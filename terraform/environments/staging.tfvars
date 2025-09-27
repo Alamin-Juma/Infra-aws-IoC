@@ -4,7 +4,7 @@
 # AWS Configuration
 aws_region = "us-east-1"
 environment = "staging"
-project_name = "itrack"
+project_name = "prodready-infra"
 
 # VPC Configuration
 vpc_cidr = "10.1.0.0/16"  # Different CIDR for staging
@@ -18,10 +18,10 @@ health_check_path = "/health"
 
 # Security Configuration (Restricted for staging)
 allowed_ips = ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]  # Private networks only
-allowed_domains = ["staging.itrack.com"]
+allowed_domains = ["staging.prodready-infra.com"]
 
 # Database Configuration (Non-Sensitive)
-db_name = "itrack_staging"
+db_name = "prodready_infra_staging"
 db_instance_class = "db.t3.micro"  # Smaller instance for staging
 
 # ECS Configuration (Smaller for staging)
@@ -30,10 +30,10 @@ ecs_cpu = 256
 ecs_memory = 512
 
 # Notification
-notification_emails = ["dev-alerts@itrack.com"]
+notification_emails = ["dev-alerts@prodready-infra.com"]
 
 # DNS Configuration
-domain_names = ["staging.itrack.com"]
+domain_names = ["staging.prodready-infra.com"]
 
 # CloudFront Cache Settings
 cloudfront_cache_settings = {

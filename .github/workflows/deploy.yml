@@ -1,4 +1,4 @@
-name: iTrack CI/CD Pipeline
+name: ProdReady_Infra CI/CD Pipeline
 
 on:
   push:
@@ -9,8 +9,8 @@ on:
 env:
   AWS_REGION: us-east-1
   ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com
-  BACKEND_REPOSITORY: itrack-backend
-  FRONTEND_REPOSITORY: itrack-frontend
+  BACKEND_REPOSITORY: prodready-infra-backend
+  FRONTEND_REPOSITORY: prodready-infra-frontend
 
 jobs:
   test:
@@ -213,14 +213,14 @@ jobs:
       run: |
         # Update backend service
         aws ecs update-service \
-          --cluster itrack-ecs-cluster-staging \
-          --service itrack-backend-service-staging \
+          --cluster prodready-infra-ecs-cluster-staging \
+          --service prodready-infra-backend-service-staging \
           --force-new-deployment
 
         # Update frontend service  
         aws ecs update-service \
-          --cluster itrack-ecs-cluster-staging \
-          --service itrack-frontend-service-staging \
+          --cluster prodready-infra-ecs-cluster-staging \
+          --service prodready-infra-frontend-service-staging \
           --force-new-deployment
 
   deploy-production:
@@ -264,8 +264,8 @@ jobs:
     - name: Blue-Green Deployment
       run: |
         # Create new task definitions with new image tags
-        BACKEND_TASK_DEF=$(aws ecs describe-task-definition --task-definition itrack-backend-production --query 'taskDefinition')
-        FRONTEND_TASK_DEF=$(aws ecs describe-task-definition --task-definition itrack-frontend-production --query 'taskDefinition')
+        BACKEND_TASK_DEF=$(aws ecs describe-task-definition --task-definition prodready-infra-backend-production --query 'taskDefinition')
+        FRONTEND_TASK_DEF=$(aws ecs describe-task-definition --task-definition prodready-infra-frontend-production --query 'taskDefinition')
         
         # Update image URIs in task definitions
         echo $BACKEND_TASK_DEF | jq --arg IMAGE "$ECR_REGISTRY/$BACKEND_REPOSITORY:$GITHUB_SHA" '.containerDefinitions[0].image = $IMAGE' > backend-task-def.json
@@ -277,20 +277,20 @@ jobs:
         
         # Update services with rolling deployment
         aws ecs update-service \
-          --cluster itrack-ecs-cluster-production \
-          --service itrack-backend-service-production \
+          --cluster prodready-infra-ecs-cluster-production \
+          --service prodready-infra-backend-service-production \
           --force-new-deployment
         
         aws ecs update-service \
-          --cluster itrack-ecs-cluster-production \
-          --service itrack-frontend-service-production \
+          --cluster prodready-infra-ecs-cluster-production \
+          --service prodready-infra-frontend-service-production \
           --force-new-deployment
 
     - name: Wait for deployment to complete
       run: |
         aws ecs wait services-stable \
-          --cluster itrack-ecs-cluster-production \
-          --services itrack-backend-service-production itrack-frontend-service-production
+          --cluster prodready-infra-ecs-cluster-production \
+          --services prodready-infra-backend-service-production prodready-infra-frontend-service-production
 
     - name: Health Check
       run: |
@@ -298,7 +298,7 @@ jobs:
         sleep 60
         
         # Health check endpoints
-        BACKEND_URL=$(aws elbv2 describe-load-balancers --names itrack-alb-production --query 'LoadBalancers[0].DNSName' --output text)
+        BACKEND_URL=$(aws elbv2 describe-load-balancers --names prodready-infra-alb-production --query 'LoadBalancers[0].DNSName' --output text)
         
         # Check backend health
         curl -f http://$BACKEND_URL/health || exit 1

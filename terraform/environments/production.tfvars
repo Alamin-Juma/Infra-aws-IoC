@@ -4,7 +4,7 @@
 # AWS Configuration
 aws_region = "us-east-1"
 environment = "production"
-project_name = "itrack"
+project_name = "prodready-infra"
 
 # VPC Configuration
 vpc_cidr = "10.0.0.0/16"
@@ -18,10 +18,10 @@ health_check_path = "/health"
 
 # Security Configuration (VPN/Bastion access only)
 allowed_ips = ["10.0.100.0/24"]  # VPN subnet only
-allowed_domains = ["itrack.com"]
+allowed_domains = ["prodready-infra.com"]
 
 # Database Configuration (Non-Sensitive)
-db_name = "itrack_production"
+db_name = "prodready_infra_production"
 db_instance_class = "db.r5.large"  # Larger instance for production
 
 # ECS Configuration (Production scale)
@@ -30,10 +30,10 @@ ecs_cpu = 1024
 ecs_memory = 2048
 
 # Notification
-notification_emails = ["ops-alerts@itrack.com", "devops@itrack.com"]
+notification_emails = ["ops-alerts@prodready-infra.com", "devops@prodready-infra.com"]
 
 # DNS Configuration
-domain_names = ["itrack.com", "www.itrack.com"]
+domain_names = ["prodready-infra.com", "www.prodready-infra.com"]
 
 # CloudFront Cache Settings
 cloudfront_cache_settings = {

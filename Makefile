@@ -1,4 +1,4 @@
-# Makefile for iTrack Application Deployment
+# Makefile for ProdReady_Infra Application Deployment
 
 # Variables
 AWS_REGION ?= us-east-1
@@ -6,7 +6,7 @@ ENVIRONMENT ?= staging
 TF_DIR = terraform
 BACKEND_DIR = backend
 FRONTEND_DIR = frontend
-PROJECT_NAME = itrack
+PROJECT_NAME = prodready-infra
 
 # AWS Account ID (dynamically fetched)
 AWS_ACCOUNT_ID := $(shell aws sts get-caller-identity --query Account --output text)
@@ -21,7 +21,7 @@ BACKEND_CONFIG = backends/$(ENVIRONMENT).conf
 # Target to display help information
 .PHONY: help
 help:
-	@echo "iTrack Application Deployment Makefile"
+	@echo "ProdReady_Infra Application Deployment Makefile"
 	@echo ""
 	@echo "Usage:"
 	@echo "  make [target] ENVIRONMENT=[staging|production]"
@@ -178,7 +178,7 @@ promote-to-production:
 health-check:
 	@echo "Running health checks for $(ENVIRONMENT)..."
 	# Add health check commands here
-	curl -f "https://api-$(ENVIRONMENT).itrack.com/health" || echo "Health check failed"
+	curl -f "https://api-$(ENVIRONMENT).prodready-infra.com/health" || echo "Health check failed"
 
 # Deploy everything with proper order
 .PHONY: deploy deploy-infra deploy-apps

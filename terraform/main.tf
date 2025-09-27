@@ -9,8 +9,8 @@ terraform {
   required_version = ">= 1.2.0"
 
   backend "s3" {
-    bucket = "itrack-terraform-state"
-    key    = "itrack/production/terraform.tfstate"
+    bucket = "prodready-infra-terraform-state"
+    key    = "prodready-infra/production/terraform.tfstate"
     region = "us-east-1"
     # Enable DynamoDB state locking
     dynamodb_table = "terraform-state-lock"
@@ -22,7 +22,7 @@ provider "aws" {
   region = var.aws_region
   default_tags {
     tags = {
-      Project     = "iTrack"
+      Project     = "ProdReady_Infra"
       Environment = var.environment
       ManagedBy   = "Terraform"
     }
@@ -35,7 +35,7 @@ provider "aws" {
   region = var.cross_region_backup_region
   default_tags {
     tags = {
-      Project     = "iTrack"
+      Project     = "ProdReady_Infra"
       Environment = var.environment
       ManagedBy   = "Terraform"
     }
