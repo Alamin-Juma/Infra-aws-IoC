@@ -75,7 +75,7 @@ resource "aws_cloudfront_origin_request_policy" "api" {
   headers_config {
     header_behavior = "whitelist"
     headers {
-      items = ["Authorization", "Host", "Origin", "Referer"]
+      items = ["Host", "Origin", "Referer"]  # Removed Authorization due to CloudFront restrictions
     }
   }
   
@@ -141,45 +141,45 @@ resource "aws_cloudfront_cache_policy" "dynamic" {
   }
 }
 
-# Response Headers Policy
-resource "aws_cloudfront_response_headers_policy" "security_headers" {
-  name    = "${var.project_name}-security-headers-policy"
-  comment = "Security headers policy"
-  
-  security_headers_config {
-    content_security_policy {
-      content_security_policy = "default-src 'self'; img-src 'self' data:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self'; connect-src 'self' *.amazonaws.com;"
-      override                = true
-    }
-    
-    content_type_options {
-      override = true
-    }
-    
-    frame_options {
-      frame_option = "DENY"
-      override     = true
-    }
-    
-    referrer_policy {
-      referrer_policy = "same-origin"
-      override        = true
-    }
-    
-    strict_transport_security {
-      access_control_max_age_sec = 31536000
-      include_subdomains         = true
-      preload                    = true
-      override                   = true
-    }
-    
-    xss_protection {
-      mode_block = true
-      protection = true
-      override   = true
-    }
-  }
-}
+# Response Headers Policy (disabled due to permission restrictions)
+# resource "aws_cloudfront_response_headers_policy" "security_headers" {
+#   name    = "${var.project_name}-security-headers-policy"
+#   comment = "Security headers policy"
+#   
+#   security_headers_config {
+#     content_security_policy {
+#       content_security_policy = "default-src 'self'; img-src 'self' data:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self'; connect-src 'self' *.amazonaws.com;"
+#       override                = true
+#     }
+#     
+#     content_type_options {
+#       override = true
+#     }
+#     
+#     frame_options {
+#       frame_option = "DENY"
+#       override     = true
+#     }
+#     
+#     referrer_policy {
+#       referrer_policy = "same-origin"
+#       override        = true
+#     }
+#     
+#     strict_transport_security {
+#       access_control_max_age_sec = 31536000
+#       include_subdomains         = true
+#       preload                    = true
+#       override                   = true
+#     }
+#     
+#     xss_protection {
+#       mode_block = true
+#       protection = true
+#       override   = true
+#     }
+#   }
+# }
 
 # CloudFront Distribution
 resource "aws_cloudfront_distribution" "main" {
@@ -220,7 +220,7 @@ resource "aws_cloudfront_distribution" "main" {
     viewer_protocol_policy   = "redirect-to-https"
     compress                 = true
     cache_policy_id          = aws_cloudfront_cache_policy.static.id
-    response_headers_policy_id = aws_cloudfront_response_headers_policy.security_headers.id
+    # response_headers_policy_id = aws_cloudfront_response_headers_policy.security_headers.id  # Disabled due to permissions
   }
   
   # API Paths Behavior

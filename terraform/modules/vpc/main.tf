@@ -54,11 +54,11 @@ resource "aws_subnet" "private" {
 
 # Database subnet group
 resource "aws_db_subnet_group" "database" {
-  name       = "${var.vpc_name}-db-subnet-group"
+  name       = "${var.vpc_name}-db-subnet-group-v2"  # Changed name to avoid conflict
   subnet_ids = aws_subnet.private[*].id
 
   tags = {
-    Name        = "${var.vpc_name}-db-subnet-group"
+    Name        = "${var.vpc_name}-db-subnet-group-v2"
     Environment = var.environment
   }
 }

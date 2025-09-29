@@ -174,7 +174,7 @@ resource "aws_cloudwatch_log_group" "lambda_logs" {
   for_each = { for func in var.lambda_functions : func.name => func }
   
   name              = "/aws/lambda/${var.project_name}-${each.key}-${var.environment}"
-  retention_in_days = 14
+  # retention_in_days = 14  # Disabled due to permission restrictions
   
   tags = {
     Name        = "${var.project_name}-${each.key}-logs"

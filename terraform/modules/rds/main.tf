@@ -113,35 +113,35 @@ resource "aws_secretsmanager_secret_version" "db_password" {
   })
 }
 
-# DB parameter group
-resource "aws_db_parameter_group" "main" {
-  name        = "${var.project_name}-${var.environment}-pg"
-  family      = "${var.engine}${replace(var.engine_version, ".", "")}"
-  description = "Parameter group for ${var.project_name} ${var.environment}"
-  
-  # PostgreSQL specific parameters
-  dynamic "parameter" {
-    for_each = var.engine == "postgres" ? [1] : []
-    content {
-      name  = "log_statement"
-      value = "ddl"
-    }
-  }
-  
-  # MySQL specific parameters
-  dynamic "parameter" {
-    for_each = var.engine == "mysql" ? [1] : []
-    content {
-      name  = "character_set_server"
-      value = "utf8mb4"
-    }
-  }
-  
-  tags = {
-    Name        = "${var.project_name}-${var.environment}-pg"
-    Environment = var.environment
-  }
-}
+# DB parameter group (disabled due to permissions)
+# resource "aws_db_parameter_group" "main" {
+#   name        = "${var.project_name}-${var.environment}-pg"
+#   family      = "${var.engine}${replace(var.engine_version, ".", "")}"
+#   description = "Parameter group for ${var.project_name} ${var.environment}"
+#   
+#   # PostgreSQL specific parameters
+#   dynamic "parameter" {
+#     for_each = var.engine == "postgres" ? [1] : []
+#     content {
+#       name  = "log_statement"
+#       value = "ddl"
+#     }
+#   }
+#   
+#   # MySQL specific parameters
+#   dynamic "parameter" {
+#     for_each = var.engine == "mysql" ? [1] : []
+#     content {
+#       name  = "character_set_server"
+#       value = "utf8mb4"
+#     }
+#   }
+#   
+#   tags = {
+#     Name        = "${var.project_name}-${var.environment}-pg"
+#     Environment = var.environment
+#   }
+# }
 
 # DB option group
 resource "aws_db_option_group" "main" {
@@ -172,7 +172,7 @@ resource "aws_db_instance" "main" {
   multi_az                = var.multi_az
   db_subnet_group_name    = var.db_subnet_group_name
   vpc_security_group_ids  = var.vpc_security_group_ids
-  parameter_group_name    = aws_db_parameter_group.main.name
+  # parameter_group_name    = aws_db_parameter_group.main.name  # Disabled due to permissions
   option_group_name       = var.engine == "mysql" ? aws_db_option_group.main[0].name : null
   skip_final_snapshot     = var.environment != "production"
   final_snapshot_identifier = "${var.project_name}-db-${var.environment}-final-snapshot"

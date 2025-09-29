@@ -89,18 +89,19 @@ resource "aws_cognito_user_pool" "main" {
     }
   }
   
-  schema {
-    name                     = "role"
-    attribute_data_type      = "String"
-    developer_only_attribute = false
-    mutable                  = true
-    required                 = false
-    
-    string_attribute_constraints {
-      min_length = 1
-      max_length = 255
-    }
-  }
+  # Remove custom role schema to simplify configuration
+  # schema {
+  #   name                     = "role"
+  #   attribute_data_type      = "String"
+  #   developer_only_attribute = false
+  #   mutable                  = true
+  #   required                 = false
+  #   
+  #   string_attribute_constraints {
+  #     min_length = 1
+  #     max_length = 255
+  #   }
+  # }
   
   # Lambda triggers if needed
   # lambda_config {
@@ -145,8 +146,8 @@ resource "aws_cognito_user_pool_client" "client" {
   ]
   
   # Read/write attributes
-  read_attributes  = ["email", "email_verified", "name", "role", "updated_at"]
-  write_attributes = ["email", "name", "role", "updated_at"]
+  read_attributes  = ["email", "email_verified", "name"]
+  write_attributes = ["email", "name"]
   
   # Don't generate a client secret for web applications
   generate_secret = false

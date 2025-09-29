@@ -71,11 +71,11 @@ resource "aws_dynamodb_table" "tables" {
     }
   }
   
-  # Time to Live
-  ttl {
-    attribute_name = "TTL"
-    enabled        = true
-  }
+  # Time to Live (disabled due to permission restrictions)
+  # ttl {
+  #   attribute_name = "TTL"
+  #   enabled        = true
+  # }
   
   # Enable point-in-time recovery for production
   point_in_time_recovery {

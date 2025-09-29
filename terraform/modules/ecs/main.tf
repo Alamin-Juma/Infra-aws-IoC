@@ -93,7 +93,7 @@ resource "aws_cloudwatch_log_group" "backend" {
   count = var.cloudwatch_logs ? 1 : 0
   name  = "/ecs/${var.project_name}-backend-${var.environment}"
   
-  retention_in_days = 30
+  # retention_in_days = 30  # Disabled due to permission restrictions
   
   tags = {
     Name        = "${var.project_name}-backend-logs"
@@ -105,7 +105,7 @@ resource "aws_cloudwatch_log_group" "frontend" {
   count = var.cloudwatch_logs ? 1 : 0
   name  = "/ecs/${var.project_name}-frontend-${var.environment}"
   
-  retention_in_days = 30
+  # retention_in_days = 30  # Disabled due to permission restrictions
   
   tags = {
     Name        = "${var.project_name}-frontend-logs"
@@ -165,57 +165,57 @@ resource "aws_iam_role" "task_role" {
   }
 }
 
-# Additional permissions for task role
-resource "aws_iam_policy" "task_policy" {
-  name        = "${var.project_name}-task-policy-${var.environment}"
-  description = "Policy for ECS tasks"
-  
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "dynamodb:GetItem",
-          "dynamodb:PutItem",
-          "dynamodb:DeleteItem",
-          "dynamodb:UpdateItem",
-          "dynamodb:Query",
-          "dynamodb:Scan"
-        ]
-        Resource = [
-          "arn:aws:dynamodb:*:*:table/${var.project_name}-*-${var.environment}"
-        ]
-      },
-      {
-        Effect = "Allow"
-        Action = [
-          "ssm:GetParameters",
-          "ssm:GetParameter",
-          "ssm:GetParametersByPath"
-        ]
-        Resource = [
-          "arn:aws:ssm:*:*:parameter/${var.project_name}/${var.environment}/*"
-        ]
-      },
-      {
-        Effect = "Allow"
-        Action = [
-          "cognito-idp:AdminInitiateAuth",
-          "cognito-idp:AdminCreateUser"
-        ]
-        Resource = [
-          "arn:aws:cognito-idp:*:*:userpool/*"
-        ]
-      }
-    ]
-  })
-}
+# Additional permissions for task role (disabled due to IAM permissions)
+# resource "aws_iam_policy" "task_policy" {
+#   name        = "${var.project_name}-task-policy-${var.environment}"
+#   description = "Policy for ECS tasks"
+#   
+#   policy = jsonencode({
+#     Version = "2012-10-17"
+#     Statement = [
+#       {
+#         Effect = "Allow"
+#         Action = [
+#           "dynamodb:GetItem",
+#           "dynamodb:PutItem",
+#           "dynamodb:DeleteItem",
+#           "dynamodb:UpdateItem",
+#           "dynamodb:Query",
+#           "dynamodb:Scan"
+#         ]
+#         Resource = [
+#           "arn:aws:dynamodb:*:*:table/${var.project_name}-*-${var.environment}"
+#         ]
+#       },
+#       {
+#         Effect = "Allow"
+#         Action = [
+#           "ssm:GetParameters",
+#           "ssm:GetParameter",
+#           "ssm:GetParametersByPath"
+#         ]
+#         Resource = [
+#           "arn:aws:ssm:*:*:parameter/${var.project_name}/${var.environment}/*"
+#         ]
+#       },
+#       {
+#         Effect = "Allow"
+#         Action = [
+#           "cognito-idp:AdminInitiateAuth",
+#           "cognito-idp:AdminCreateUser"
+#         ]
+#         Resource = [
+#           "arn:aws:cognito-idp:*:*:userpool/*"
+#         ]
+#       }
+#     ]
+#   })
+# }
 
-resource "aws_iam_role_policy_attachment" "task_role_policy" {
-  role       = aws_iam_role.task_role.name
-  policy_arn = aws_iam_policy.task_policy.arn
-}
+# resource "aws_iam_role_policy_attachment" "task_role_policy" {
+#   role       = aws_iam_role.task_role.name
+#   policy_arn = aws_iam_policy.task_policy.arn
+# }
 
 # Application Load Balancer
 resource "aws_lb" "main" {
