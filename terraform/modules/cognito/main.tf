@@ -126,9 +126,14 @@ resource "aws_cognito_user_pool_client" "client" {
   logout_urls                          = ["https://example.com/logout", "http://localhost:3000/logout"]
   
   # Token configuration
-  id_token_validity                     = 60 # minutes
-  access_token_validity                 = 60 # minutes
-  refresh_token_validity                = 30 # days
+  id_token_validity                     = 60
+  access_token_validity                 = 60
+  refresh_token_validity                = 30
+  token_validity_units {
+    id_token      = "minutes"
+    access_token  = "minutes"
+    refresh_token = "days"
+  }
   prevent_user_existence_errors         = "ENABLED"
   enable_token_revocation               = true
   

@@ -235,7 +235,7 @@ resource "aws_lb" "main" {
 
 # Target Groups
 resource "aws_lb_target_group" "backend" {
-  name        = "${var.project_name}-backend-tg-${var.environment}"
+  name        = "pinfra-be-tg-${var.environment}"
   port        = var.container_port
   protocol    = "HTTP"
   vpc_id      = var.vpc_id
@@ -257,7 +257,7 @@ resource "aws_lb_target_group" "backend" {
 }
 
 resource "aws_lb_target_group" "frontend" {
-  name        = "${var.project_name}-frontend-tg-${var.environment}"
+  name        = "pinfra-fe-tg-${var.environment}"
   port        = 80
   protocol    = "HTTP"
   vpc_id      = var.vpc_id

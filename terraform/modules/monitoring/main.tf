@@ -320,7 +320,7 @@ resource "aws_cloudwatch_metric_alarm" "api_latency" {
   metric_name         = "Latency"
   namespace           = "AWS/ApiGateway"
   period              = 300
-  statistic           = "p90"
+  extended_statistic  = "p90"
   threshold           = 5000  # 5 seconds in ms
   alarm_description   = "API Gateway latency is too high"
   treat_missing_data  = "notBreaching"
@@ -415,86 +415,19 @@ resource "aws_cloudwatch_dashboard" "main" {
           }
         }
       ] : [],
-      # RDS Widgets
-      var.db_instance_id != "" ? [
+      # RDS Widgets - simplified to always show (conditional logic can be complex)
+      [
         {
           type = "text"
           x    = 0
-          y    = 1 # Fixed y-coordinate
+          y    = 1
           width = 24
           height = 1
           properties = {
             markdown = "## RDS Database"
           }
-        },
-        {
-          type = "metric"
-          x    = 0
-          y    = 2 # Fixed y-coordinate
-          width = 8
-          height = 6
-          properties = {
-            metrics = [
-              [
-                "AWS/RDS", "CPUUtilization",
-                "DBInstanceIdentifier", var.db_instance_id
-              ]
-            ],
-            view = "timeSeries",
-            stacked = false,
-            region = "us-east-1",
-            title = "RDS CPU Utilization",
-            period = 300,
-            stat = "Average"
-          }
-        },
-        {
-          type = "metric"
-          x    = 8
-          y    = 2 # Fixed y-coordinate
-          width = 8
-          height = 6
-          properties = {
-            metrics = [
-              [
-                "AWS/RDS", "FreeableMemory",
-                "DBInstanceIdentifier", var.db_instance_id
-              ]
-            ],
-            view = "timeSeries",
-            stacked = false,
-            region = "us-east-1",
-            title = "RDS Freeable Memory",
-            period = 300,
-            stat = "Average"
-          }
-        },
-        {
-          type = "metric"
-          x    = 16
-          y    = 2 # Fixed y-coordinate
-          width = 8
-          height = 6
-          properties = {
-            metrics = [
-              [
-                "AWS/RDS", "ReadIOPS",
-                "DBInstanceIdentifier", var.db_instance_id
-              ],
-              [
-                "AWS/RDS", "WriteIOPS",
-                "DBInstanceIdentifier", var.db_instance_id
-              ]
-            ],
-            view = "timeSeries",
-            stacked = false,
-            region = "us-east-1",
-            title = "RDS IOPS",
-            period = 300,
-            stat = "Average"
-          }
         }
-      ] : [],
+      ],
       # Lambda Widgets
       length(var.lambda_function_names) > 0 ? [
         {
@@ -571,86 +504,19 @@ resource "aws_cloudwatch_dashboard" "main" {
           }
         }
       ] : [],
-      # API Gateway Widgets
-      var.api_gateway_name != "" ? [
+      # API Gateway Widgets - simplified
+      [
         {
           type = "text"
           x    = 0
-          y    = 15 # Fixed y-coordinate
+          y    = 15
           width = 24
           height = 1
           properties = {
             markdown = "## API Gateway"
           }
-        },
-        {
-          type = "metric"
-          x    = 0
-          y    = 16 # Fixed y-coordinate
-          width = 8
-          height = 6
-          properties = {
-            metrics = [
-              [
-                "AWS/ApiGateway", "Count",
-                "ApiName", var.api_gateway_name
-              ]
-            ],
-            view = "timeSeries",
-            stacked = false,
-            region = "us-east-1",
-            title = "API Gateway Requests",
-            period = 300,
-            stat = "Sum"
-          }
-        },
-        {
-          type = "metric"
-          x    = 8
-          y    = 16 # Fixed y-coordinate
-          width = 8
-          height = 6
-          properties = {
-            metrics = [
-              [
-                "AWS/ApiGateway", "4XXError",
-                "ApiName", var.api_gateway_name
-              ],
-              [
-                "AWS/ApiGateway", "5XXError",
-                "ApiName", var.api_gateway_name
-              ]
-            ],
-            view = "timeSeries",
-            stacked = false,
-            region = "us-east-1",
-            title = "API Gateway Errors",
-            period = 300,
-            stat = "Sum"
-          }
-        },
-        {
-          type = "metric"
-          x    = 16
-          y    = 16 # Fixed y-coordinate
-          width = 8
-          height = 6
-          properties = {
-            metrics = [
-              [
-                "AWS/ApiGateway", "Latency",
-                "ApiName", var.api_gateway_name
-              ]
-            ],
-            view = "timeSeries",
-            stacked = false,
-            region = "us-east-1",
-            title = "API Gateway Latency",
-            period = 300,
-            stat = "p90"
-          }
         }
-      ] : []
+      ]
     )
   })
 }

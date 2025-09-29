@@ -227,3 +227,8 @@ output "api_resource_id" {
   description = "ID of the API resource"
   value       = aws_api_gateway_resource.api.id
 }
+
+output "api_arn" {
+  description = "ARN of the API Gateway"
+  value       = aws_api_gateway_rest_api.main.arn
+}

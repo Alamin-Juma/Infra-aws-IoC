@@ -251,13 +251,7 @@ resource "aws_cloudfront_distribution" "main" {
   }
   
   # Domain Name Settings
-  dynamic "aliases" {
-    for_each = length(var.domain_names) > 0 && var.acm_certificate_arn != "" ? [1] : []
-    
-    content {
-      aliases = var.domain_names
-    }
-  }
+  aliases = length(var.domain_names) > 0 && var.acm_certificate_arn != "" ? var.domain_names : []
   
   # SSL Certificate
   dynamic "viewer_certificate" {

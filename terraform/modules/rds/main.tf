@@ -194,8 +194,10 @@ resource "aws_db_instance" "main" {
     Environment = var.environment
   }
   
+  # Lifecycle management - prevent_destroy is set statically
+  # For production, manually change this to true before deployment
   lifecycle {
-    prevent_destroy = var.environment == "production"
+    prevent_destroy = false
   }
 }
 
