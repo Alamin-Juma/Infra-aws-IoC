@@ -4,6 +4,11 @@ variable "aws_region" {
   default     = "us-east-1"
 }
 
+variable "aws_account_id" {
+  description = "AWS account ID"
+  type        = string
+}
+
 variable "environment" {
   description = "Environment name (e.g., dev, staging, production)"
   type        = string

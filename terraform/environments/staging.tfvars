@@ -3,6 +3,7 @@
 
 # AWS Configuration
 aws_region = "us-east-1"
+aws_account_id = "631876831364"
 environment = "staging"
 project_name = "prodready-infra"
 
@@ -23,6 +24,8 @@ allowed_domains = ["staging.prodready-infra.com"]
 # Database Configuration (Non-Sensitive)
 db_name = "prodready_infra_staging"
 db_instance_class = "db.t3.micro"  # Smaller instance for staging
+# Note: db_password should be set via environment variable or AWS Secrets Manager
+# Export TF_VAR_db_password="your_password_here" or use AWS Secrets Manager
 
 # ECS Configuration (Smaller for staging)
 ecs_desired_count = 1

@@ -1,5 +1,5 @@
 # ===========================================
-# iTrack Application - GitIgnore File
+# ProdReady_Infra Application - GitIgnore File
 # ===========================================
 
 # Node.js Dependencies
@@ -65,21 +65,43 @@ $RECYCLE.BIN/
 # Terraform files
 *.tfstate
 *.tfstate.*
+*.tfstate.backup
 *.tfplan
-*.tfvars
-!terraform.tfvars.example
-!terraform/environments/*.tfvars
+*.tfplan.*
 .terraform/
 .terraform.lock.hcl
 terraform.tfstate.d/
 tfplan
+tfplan.*
 crash.log
+crash.*.log
 override.tf
 override.tf.json
 *_override.tf
 *_override.tf.json
 .terraformrc
 terraform.rc
+
+# Terraform environment files - keep examples and staging
+*.tfvars
+!terraform.tfvars.example
+!terraform/environments/*.tfvars
+!terraform/environments/staging.tfvars
+!terraform/environments/production.tfvars
+
+# Terraform backend configs - keep for reference
+!terraform/backends/*.conf
+
+# Terraform module outputs (generated)
+terraform/modules/**/terraform.tfstate*
+terraform/modules/**/.terraform/
+
+# SSH keys (except public keys)
+*.pem
+*.key
+!*.pub
+ssh-keys/
+!ssh-keys/README.md
 
 # Logs
 *.log

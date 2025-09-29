@@ -53,15 +53,10 @@ data "aws_caller_identity" "current" {}
 module "vpc" {
   source = "./modules/vpc"
 
-  vpc_name            = "${var.project_name}-vpc"
-  environment         = var.environment
-  cidr_block          = var.vpc_cidr
-  availability_zones  = slice(data.aws_availability_zones.available.names, 0, var.az_count)
-  public_subnets      = var.public_subnets
-  private_subnets     = var.private_subnets
-  enable_nat_gateway  = true
-  single_nat_gateway  = var.environment != "production" # Use multiple NAT gateways in production
-  enable_vpn_gateway  = false
+  vpc_name           = "${var.project_name}-vpc"
+  environment        = var.environment
+  vpc_cidr           = var.vpc_cidr
+  availability_zones = slice(data.aws_availability_zones.available.names, 0, var.az_count)
 }
 
 # Security Groups
@@ -142,6 +137,10 @@ module "lambda" {
   lambda_functions = var.lambda_functions
   dynamo_table_arns = module.dynamodb.table_arns
   api_gateway_id    = module.api_gateway.api_id
+  api_gateway_root_resource_id = module.api_gateway.api_resource_id
+  aws_region        = var.aws_region
+  aws_account_id    = var.aws_account_id
+  cognito_authorizer_id = module.cognito.user_pool_arn
 }
 
 # ECS Cluster, Services and Task Definitions
@@ -167,30 +166,30 @@ module "ecs" {
   cloudwatch_logs    = true
 }
 
-# CloudWatch Monitoring and Alarms
-module "monitoring" {
-  source = "./modules/monitoring"
-  
-  environment   = var.environment
-  project_name  = var.project_name
-  
-  # ECS Alarms
-  cluster_name  = module.ecs.cluster_name
-  service_names = module.ecs.service_names
-  
-  # RDS Alarms
-  db_instance_id = module.rds.db_instance_id
-  
-  # Lambda Alarms
-  lambda_function_names = module.lambda.function_names
-  
-  # API Gateway Alarms
-  api_gateway_name = module.api_gateway.api_name
-  
-  # Create appropriate dashboards and alerts
-  create_dashboard = true
-  notification_emails = var.notification_emails
-}
+# CloudWatch Monitoring and Alarms (disabled for initial deployment)
+# module "monitoring" {
+#   source = "./modules/monitoring"
+#   
+#   environment   = var.environment
+#   project_name  = var.project_name
+#   
+#   # ECS Alarms
+#   cluster_name  = module.ecs.cluster_name
+#   service_names = module.ecs.service_names
+#   
+#   # RDS Alarms
+#   db_instance_id = module.rds.db_instance_id
+#   
+#   # Lambda Alarms
+#   lambda_function_names = module.lambda.function_names
+#   
+#   # API Gateway Alarms
+#   api_gateway_name = module.api_gateway.api_name
+#   
+#   # Create appropriate dashboards and alerts
+#   create_dashboard = true
+#   notification_emails = var.notification_emails
+# }
 
 # S3 Bucket for Frontend Assets (if needed)
 module "s3_hosting" {
@@ -233,19 +232,20 @@ module "route53" {
 }
 
 # Secrets Manager for sensitive data
-module "secrets" {
-  source = "./modules/secrets"
-  
-  environment = var.environment
-  project_name = var.project_name
-  secrets = {
-    for k, v in var.sensitive_secrets :
-    k => {
-      description = v.description
-      secret_value = v.value
-    }
-  }
-}
+# Secrets Manager (disabled for initial deployment)
+# module "secrets" {
+#   source = "./modules/secrets"
+#   
+#   environment = var.environment
+#   project_name = var.project_name
+#   secrets = {
+#     for k, v in var.sensitive_secrets :
+#     k => {
+#       description = v.description
+#       secret_value = v.value
+#     }
+#   }
+# }
 
 # WAF for API Gateway protection
 module "waf" {
