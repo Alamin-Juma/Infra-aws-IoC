@@ -54,7 +54,8 @@ cloudfront_cache_settings = {
 
 # Database User Configuration (Sensitive data via environment variables)
 db_username = "admin"
-# Note: Set TF_VAR_db_password environment variable
+db_password = "TempPassword123!"  # Temporary password for staging deployment
+# Note: Set TF_VAR_db_password environment variable for production
 
 # Lambda Functions Configuration
 lambda_functions = [
