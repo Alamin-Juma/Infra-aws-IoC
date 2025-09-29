@@ -35,8 +35,8 @@ ecs_memory = 512
 # Notification
 notification_emails = ["dev-alerts@prodready-infra.com"]
 
-# DNS Configuration
-domain_names = ["staging.prodready-infra.com"]
+# DNS Configuration (disabled for initial deployment)
+domain_names = []
 
 # CloudFront Cache Settings
 cloudfront_cache_settings = {
@@ -51,3 +51,53 @@ cloudfront_cache_settings = {
     max_ttl     = 300     # 5 minutes
   }
 }
+
+# Database User Configuration (Sensitive data via environment variables)
+db_username = "admin"
+# Note: Set TF_VAR_db_password environment variable
+
+# Lambda Functions Configuration
+lambda_functions = [
+  {
+    name        = "prodready-infra-api-handler"
+    runtime     = "nodejs16.x"
+    handler     = "index.handler"
+    timeout     = 30
+    memory_size = 128
+    zip_file    = "../lambda/prodready-infra-api-handler.zip"
+    environment_variables = {
+      DYNAMODB_TABLE = "prodready-infra-items"
+    }
+  }
+]
+
+# DynamoDB Tables Configuration
+dynamodb_tables = [
+  {
+    name           = "prodready-infra-items"
+    hash_key       = "id"
+    range_key      = ""
+    billing_mode   = "PAY_PER_REQUEST"
+    read_capacity  = 0
+    write_capacity = 0
+    attributes = [
+      {
+        name = "id"
+        type = "S"
+      }
+    ]
+    global_secondary_indexes = []
+  }
+]
+
+# Backup Configuration
+backup_retention_days = 7
+enable_cross_region_backup = false
+cross_region_backup_region = "us-west-2"
+
+# WAF Configuration
+waf_rate_limit = 10000
+waf_allowed_countries = ["US", "CA", "GB", "AU"]
+
+# ACM Certificate (empty for initial deployment)
+acm_certificate_arn = ""

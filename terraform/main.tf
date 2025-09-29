@@ -135,7 +135,7 @@ module "lambda" {
   subnet_ids      = module.vpc.private_subnets
   security_group_ids = [module.security_groups.lambda_security_group_id]
   lambda_functions = var.lambda_functions
-  dynamo_table_arns = module.dynamodb.table_arns
+  dynamo_table_arns = values(module.dynamodb.table_arns)
   api_gateway_id    = module.api_gateway.api_id
   api_gateway_root_resource_id = module.api_gateway.api_resource_id
   aws_region        = var.aws_region
@@ -221,15 +221,15 @@ module "cloudfront" {
   domain_names       = var.domain_names
 }
 
-# Route53 for DNS (if needed)
-module "route53" {
-  count  = length(var.domain_names) > 0 ? 1 : 0
-  source = "./modules/route53"
-  
-  domain_names       = var.domain_names
-  cloudfront_domain  = module.cloudfront.domain_name
-  cloudfront_zone_id = module.cloudfront.hosted_zone_id
-}
+# Route53 for DNS (disabled for initial deployment - no domain configured)
+# module "route53" {
+#   count  = length(var.domain_names) > 0 ? 1 : 0
+#   source = "./modules/route53"
+#   
+#   domain_names       = var.domain_names
+#   cloudfront_domain  = module.cloudfront.domain_name
+#   cloudfront_zone_id = module.cloudfront.hosted_zone_id
+# }
 
 # Secrets Manager for sensitive data
 # Secrets Manager (disabled for initial deployment)

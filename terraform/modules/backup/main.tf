@@ -176,25 +176,25 @@ resource "aws_backup_plan" "main" {
   }
 }
 
-# Backup Selection for RDS
-resource "aws_backup_selection" "rds_backup" {
-  count = var.rds_instance_id != "" ? 1 : 0
-  
-  iam_role_arn = aws_iam_role.backup_role.arn
-  name         = "${var.project_name}-rds-backup-selection-${var.environment}"
-  plan_id      = aws_backup_plan.main.id
-  
-  resources = [
-    "arn:aws:rds:*:*:db:${var.rds_instance_id}"
-  ]
-  
-  condition {
-    string_equals {
-      key   = "aws:ResourceTag/Environment"
-      value = var.environment
-    }
-  }
-}
+# Backup Selection for RDS (disabled for initial deployment to avoid count dependency)
+# resource "aws_backup_selection" "rds_backup" {
+#   count = var.rds_instance_id != "" ? 1 : 0
+#   
+#   iam_role_arn = aws_iam_role.backup_role.arn
+#   name         = "${var.project_name}-rds-backup-selection-${var.environment}"
+#   plan_id      = aws_backup_plan.main.id
+#   
+#   resources = [
+#     "arn:aws:rds:*:*:db:${var.rds_instance_id}"
+#   ]
+#   
+#   condition {
+#     string_equals {
+#       key   = "aws:ResourceTag/Environment"
+#       value = var.environment
+#     }
+#   }
+# }
 
 # Backup Selection for DynamoDB
 resource "aws_backup_selection" "dynamodb_backup" {
