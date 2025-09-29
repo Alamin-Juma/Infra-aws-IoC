@@ -74,40 +74,39 @@ variable "dynamodb_tables" {
   type = list(object({
     name           = string
     hash_key       = string
-    range_key      = optional(string)
+    range_key      = string
     billing_mode   = string
-    read_capacity  = optional(number)
-    write_capacity = optional(number)
+    read_capacity  = number
+    write_capacity = number
     attributes = list(object({
       name = string
       type = string
     }))
-    global_secondary_indexes = optional(list(object({
+    global_secondary_indexes = list(object({
       name               = string
       hash_key           = string
-      range_key          = optional(string)
+      range_key          = string
       projection_type    = string
-      non_key_attributes = optional(list(string))
-      read_capacity      = optional(number)
-      write_capacity     = optional(number)
-    })))
+      non_key_attributes = list(string)
+      read_capacity      = number
+      write_capacity     = number
+    }))
   }))
   default = [
     {
-      name         = "prodready-infra-items"
-      hash_key     = "id"
-      range_key    = "type"
-      billing_mode = "PAY_PER_REQUEST"
+      name           = "prodready-infra-items"
+      hash_key       = "id"
+      range_key      = ""
+      billing_mode   = "PAY_PER_REQUEST"
+      read_capacity  = 0
+      write_capacity = 0
       attributes = [
         {
           name = "id"
           type = "S"
-        },
-        {
-          name = "type"
-          type = "S"
         }
       ]
+      global_secondary_indexes = []
     }
   ]
 }
@@ -146,7 +145,7 @@ variable "lambda_functions" {
     timeout       = number
     memory_size   = number
     zip_file      = string
-    environment_variables = optional(map(string))
+    environment_variables = map(string)
   }))
   default = [
     {

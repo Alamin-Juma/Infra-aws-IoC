@@ -1,5 +1,5 @@
-# GitHub Actions CI/CD Workflow for iTrack Application
-name: Build and Deploy iTrack
+# GitHub Actions CI/CD Workflow for ProdReady_Infra Application
+name: Build and Deploy ProdReady_Infra
 
 on:
   push:
@@ -9,12 +9,12 @@ on:
 
 env:
   AWS_REGION: us-east-1
-  ECR_BACKEND_REPOSITORY: itrack-backend
-  ECR_FRONTEND_REPOSITORY: itrack-frontend
-  ECS_CLUSTER: itrack-cluster
-  ECS_BACKEND_SERVICE: itrack-backend-service
-  ECS_FRONTEND_SERVICE: itrack-frontend-service
-  S3_BUCKET: itrack-assets-production
+  ECR_BACKEND_REPOSITORY: prodready-infra-backend
+  ECR_FRONTEND_REPOSITORY: prodready-infra-frontend
+  ECS_CLUSTER: prodready-infra-cluster
+  ECS_BACKEND_SERVICE: prodready-infra-backend-service
+  ECS_FRONTEND_SERVICE: prodready-infra-frontend-service
+  S3_BUCKET: prodready-infra-assets-production
 
 jobs:
   terraform:
@@ -36,7 +36,7 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v2
         with:
-          terraform_version: 1.2.0
+          terraform_version: 1.5.7
       
       - name: Terraform Init
         working-directory: ./terraform
@@ -145,7 +145,7 @@ jobs:
       
       - name: Invalidate CloudFront cache
         run: |
-          aws cloudfront create-invalidation --distribution-id $(aws cloudfront list-distributions --query "DistributionList.Items[?Aliases.Items[?contains(@,'itrack')]].Id" --output text) --paths "/*"
+          aws cloudfront create-invalidation --distribution-id $(aws cloudfront list-distributions --query "DistributionList.Items[?Aliases.Items[?contains(@,'prodready-infra')]].Id" --output text) --paths "/*"
   
   security-scan:
     name: Security Scan
