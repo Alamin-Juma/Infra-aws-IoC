@@ -2,7 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
+const { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, DeleteCommand, ScanCommand } = require('@aws-sdk/lib-dynamodb');
 
 // Initialize Express
 const app = express();
@@ -31,18 +31,34 @@ app.get('/health', (req, res) => {
 });
 
 // API Routes
+app.get('/api', (req, res) => {
+  res.json({ 
+    message: 'Welcome to the iTrack API!', 
+    version: '1.0',
+    endpoints: {
+      items: '/api/items',
+      health: '/health'
+    }
+  });
+});
+
 app.get('/api/items', async (req, res) => {
   try {
+    console.log('Fetching items from table:', tableName);
+    
+    // Simply scan for all items without creating a test item
     const params = {
-      TableName: tableName,
-      // Define your query parameters based on your data model
+      TableName: tableName
     };
     
-    const result = await dynamoDb.send(new QueryCommand(params));
+    console.log('Sending ScanCommand with params:', JSON.stringify(params));
+    const result = await dynamoDb.send(new ScanCommand(params));
+    console.log('Scan result count:', result.Count);
     
     res.json({
       items: result.Items || [],
-      count: result.Count || 0
+      count: result.Count || 0,
+      message: 'Items retrieved successfully'
     });
   } catch (error) {
     console.error('Error fetching items:', error);

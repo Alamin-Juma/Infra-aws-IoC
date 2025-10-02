@@ -165,6 +165,38 @@ resource "aws_iam_role" "task_role" {
   }
 }
 
+# DynamoDB access policy for task role
+resource "aws_iam_policy" "dynamodb_policy" {
+  name        = "${var.project_name}-dynamodb-policy-${var.environment}"
+  description = "Policy for ECS tasks to access DynamoDB"
+  
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
+          "dynamodb:DeleteItem",
+          "dynamodb:UpdateItem",
+          "dynamodb:Query",
+          "dynamodb:Scan"
+        ]
+        Resource = [
+          "arn:aws:dynamodb:*:*:table/${var.project_name}-*-${var.environment}"
+        ]
+      }
+    ]
+  })
+}
+
+# Attach DynamoDB policy to task role
+resource "aws_iam_role_policy_attachment" "task_dynamodb_policy" {
+  role       = aws_iam_role.task_role.name
+  policy_arn = aws_iam_policy.dynamodb_policy.arn
+}
+
 # Additional permissions for task role (disabled due to IAM permissions)
 # resource "aws_iam_policy" "task_policy" {
 #   name        = "${var.project_name}-task-policy-${var.environment}"
@@ -173,20 +205,6 @@ resource "aws_iam_role" "task_role" {
 #   policy = jsonencode({
 #     Version = "2012-10-17"
 #     Statement = [
-#       {
-#         Effect = "Allow"
-#         Action = [
-#           "dynamodb:GetItem",
-#           "dynamodb:PutItem",
-#           "dynamodb:DeleteItem",
-#           "dynamodb:UpdateItem",
-#           "dynamodb:Query",
-#           "dynamodb:Scan"
-#         ]
-#         Resource = [
-#           "arn:aws:dynamodb:*:*:table/${var.project_name}-*-${var.environment}"
-#         ]
-#       },
 #       {
 #         Effect = "Allow"
 #         Action = [
@@ -285,11 +303,23 @@ resource "aws_lb_listener" "http" {
   protocol          = "HTTP"
   
   default_action {
-    type = "redirect"
-    redirect {
-      port        = "443"
-      protocol    = "HTTPS"
-      status_code = "HTTP_301"
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.frontend.arn
+  }
+}
+
+resource "aws_lb_listener_rule" "backend" {
+  listener_arn = aws_lb_listener.http.arn
+  priority     = 10
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.backend.arn
+  }
+
+  condition {
+    path_pattern {
+      values = ["/api/*"]
     }
   }
 }
@@ -428,8 +458,9 @@ resource "aws_ecs_service" "backend" {
   health_check_grace_period_seconds  = 120
   
   network_configuration {
-    subnets         = var.private_subnet_ids
-    security_groups = [var.security_group_ids.ecs]
+    subnets          = var.public_subnet_ids
+    security_groups  = [var.security_group_ids.ecs]
+    assign_public_ip = true
   }
   
   load_balancer {
@@ -447,7 +478,7 @@ resource "aws_ecs_service" "backend" {
     Environment = var.environment
   }
   
-  depends_on = [aws_lb_target_group.backend]
+  depends_on = [aws_lb_listener_rule.backend]
 }
 
 # Frontend Service
@@ -460,8 +491,9 @@ resource "aws_ecs_service" "frontend" {
   health_check_grace_period_seconds  = 120
   
   network_configuration {
-    subnets         = var.private_subnet_ids
-    security_groups = [var.security_group_ids.ecs]
+    subnets          = var.public_subnet_ids
+    security_groups  = [var.security_group_ids.ecs]
+    assign_public_ip = true
   }
   
   load_balancer {
@@ -479,7 +511,7 @@ resource "aws_ecs_service" "frontend" {
     Environment = var.environment
   }
   
-  depends_on = [aws_lb_target_group.frontend]
+  depends_on = [aws_lb_listener.http]
 }
 
 # Auto Scaling for Backend
