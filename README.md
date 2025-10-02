@@ -56,42 +56,34 @@ NewArchitecture/
 
 ### Setup Steps
 
-1. **Create S3 bucket for Terraform state**:
+1. **Bootstrap Terraform remote state (S3 + DynamoDB)**:
    ```bash
-   aws s3 mb s3://itrack-terraform-state
+   make setup-state ENVIRONMENT=staging AWS_REGION=us-east-1
+   make setup-state ENVIRONMENT=production AWS_REGION=us-east-1
    ```
 
-2. **Create DynamoDB table for state locking**:
-   ```bash
-   aws dynamodb create-table \
-     --table-name terraform-state-lock \
-     --attribute-definitions AttributeName=LockID,AttributeType=S \
-     --key-schema AttributeName=LockID,KeyType=HASH \
-     --billing-mode PAY_PER_REQUEST
-   ```
-
-3. **Initialize Terraform**:
+2. **Initialize Terraform**:
    ```bash
    cd terraform
    terraform init
    ```
 
-4. **Create `terraform.tfvars` file**:
+3. **Create `terraform.tfvars` file**:
    ```
    aws_region     = "us-east-1"
    environment    = "production"
    project_name   = "itrack"
-   db_username    = "admin"
+   db_username    = "appadmin"
    db_password    = "secure-password-here"
    ```
 
-5. **Plan and apply infrastructure**:
+4. **Plan and apply infrastructure**:
    ```bash
    terraform plan -out=tfplan
    terraform apply tfplan
    ```
 
-6. **Build and push Docker images**:
+5. **Build and push Docker images**:
    ```bash
    # Build and push backend image
    cd ../backend

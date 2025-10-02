@@ -3,7 +3,7 @@
 
 # AWS Configuration
 aws_region = "us-east-1"
-aws_account_id = "631876831364"
+aws_account_id = "875486186130"
 environment = "staging"
 project_name = "prodready-infra"
 
@@ -53,7 +53,7 @@ cloudfront_cache_settings = {
 }
 
 # Database User Configuration (Sensitive data via environment variables)
-db_username = "admin"
+db_username = "appadmin"
 db_password = "TempPassword123!"  # Temporary password for staging deployment
 # Note: Set TF_VAR_db_password environment variable for production
 

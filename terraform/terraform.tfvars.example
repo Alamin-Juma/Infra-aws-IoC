@@ -24,7 +24,7 @@ allowed_domains = ["example.com"] # For Cognito sign-ups
 
 # Database Configuration
 db_name = "itrack"
-db_username = "admin"
+db_username = "appadmin"
 db_password = "REPLACE_WITH_SECURE_PASSWORD" # Use environment variable in production
 db_instance_class = "db.t3.small"
 

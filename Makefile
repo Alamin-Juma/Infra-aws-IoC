@@ -11,6 +11,11 @@ PROJECT_NAME = prodready-infra
 # AWS Account ID (dynamically fetched)
 AWS_ACCOUNT_ID := $(shell aws sts get-caller-identity --query Account --output text)
 
+# Remote state resources
+STATE_BUCKET := $(PROJECT_NAME)-terraform-state-$(AWS_ACCOUNT_ID)
+STATE_LOCK_TABLE_STAGING := terraform-state-lock-staging
+STATE_LOCK_TABLE_PRODUCTION := terraform-state-lock-production
+
 # ECR Repository URLs
 BACKEND_ECR_REPO = $(AWS_ACCOUNT_ID).dkr.ecr.$(AWS_REGION).amazonaws.com/$(PROJECT_NAME)-backend
 FRONTEND_ECR_REPO = $(AWS_ACCOUNT_ID).dkr.ecr.$(AWS_REGION).amazonaws.com/$(PROJECT_NAME)-frontend
@@ -121,28 +126,44 @@ push-frontend: login-ecr
 push-all: push-backend push-frontend
 
 # Setup state storage in AWS for each environment
-.PHONY: setup-state setup-state-staging setup-state-production
-setup-state: setup-state-$(ENVIRONMENT)
+.PHONY: setup-state setup-state-bucket setup-state-staging setup-state-production
+setup-state: setup-state-bucket setup-state-$(ENVIRONMENT)
+
+setup-state-bucket:
+	@echo "Ensuring Terraform state bucket exists: $(STATE_BUCKET)"
+	@aws s3 ls s3://$(STATE_BUCKET) >/dev/null 2>&1 || aws s3 mb s3://$(STATE_BUCKET) --region $(AWS_REGION)
+	@echo "Applying secure defaults to $(STATE_BUCKET)"
+	@aws s3api put-public-access-block \
+		--bucket $(STATE_BUCKET) \
+		--public-access-block-configuration BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
+	@aws s3api put-bucket-encryption \
+		--bucket $(STATE_BUCKET) \
+		--server-side-encryption-configuration '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"}}]}'
+	@aws s3api put-bucket-versioning \
+		--bucket $(STATE_BUCKET) \
+		--versioning-configuration Status=Enabled
 
 setup-state-staging:
-	aws s3 mb s3://$(PROJECT_NAME)-terraform-state-staging --region $(AWS_REGION) || true
-	aws dynamodb create-table \
-		--table-name terraform-state-lock-staging \
-		--attribute-definitions AttributeName=LockID,AttributeType=S \
-		--key-schema AttributeName=LockID,KeyType=HASH \
-		--billing-mode PAY_PER_REQUEST \
-		--region $(AWS_REGION) || true
-	@echo "Terraform state storage for staging created!"
+	@echo "Ensuring DynamoDB lock table exists: $(STATE_LOCK_TABLE_STAGING)"
+	@aws dynamodb describe-table --table-name $(STATE_LOCK_TABLE_STAGING) --region $(AWS_REGION) >/dev/null 2>&1 || \
+		aws dynamodb create-table \
+			--table-name $(STATE_LOCK_TABLE_STAGING) \
+			--attribute-definitions AttributeName=LockID,AttributeType=S \
+			--key-schema AttributeName=LockID,KeyType=HASH \
+			--billing-mode PAY_PER_REQUEST \
+			--region $(AWS_REGION)
+	@echo "Terraform state storage for staging ready!"
 
 setup-state-production:
-	aws s3 mb s3://$(PROJECT_NAME)-terraform-state-production --region $(AWS_REGION) || true
-	aws dynamodb create-table \
-		--table-name terraform-state-lock-production \
-		--attribute-definitions AttributeName=LockID,AttributeType=S \
-		--key-schema AttributeName=LockID,KeyType=HASH \
-		--billing-mode PAY_PER_REQUEST \
-		--region $(AWS_REGION) || true
-	@echo "Terraform state storage for production created!"
+	@echo "Ensuring DynamoDB lock table exists: $(STATE_LOCK_TABLE_PRODUCTION)"
+	@aws dynamodb describe-table --table-name $(STATE_LOCK_TABLE_PRODUCTION) --region $(AWS_REGION) >/dev/null 2>&1 || \
+		aws dynamodb create-table \
+			--table-name $(STATE_LOCK_TABLE_PRODUCTION) \
+			--attribute-definitions AttributeName=LockID,AttributeType=S \
+			--key-schema AttributeName=LockID,KeyType=HASH \
+			--billing-mode PAY_PER_REQUEST \
+			--region $(AWS_REGION)
+	@echo "Terraform state storage for production ready!"
 
 # Secrets management
 .PHONY: create-secrets update-secrets

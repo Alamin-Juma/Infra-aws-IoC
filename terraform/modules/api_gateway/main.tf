@@ -42,6 +42,38 @@ resource "aws_cloudwatch_log_group" "api_gateway" {
   }
 }
 
+# IAM role that allows API Gateway to push logs to CloudWatch
+resource "aws_iam_role" "api_gateway_cloudwatch" {
+  name = "${var.name}-cloudwatch-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "apigateway.amazonaws.com"
+        }
+      }
+    ]
+  })
+
+  tags = {
+    Name        = "${var.name}-cloudwatch-role"
+    Environment = var.environment
+  }
+}
+
+resource "aws_iam_role_policy_attachment" "api_gateway_cloudwatch" {
+  role       = aws_iam_role.api_gateway_cloudwatch.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonAPIGatewayPushToCloudWatchLogs"
+}
+
+resource "aws_api_gateway_account" "main" {
+  cloudwatch_role_arn = aws_iam_role.api_gateway_cloudwatch.arn
+}
+
 # Root resource
 resource "aws_api_gateway_resource" "api" {
   rest_api_id = aws_api_gateway_rest_api.main.id
@@ -84,6 +116,11 @@ resource "aws_api_gateway_deployment" "main" {
 
 # API Gateway Stage
 resource "aws_api_gateway_stage" "main" {
+  depends_on = [
+    aws_api_gateway_account.main,
+    aws_iam_role_policy_attachment.api_gateway_cloudwatch
+  ]
+
   deployment_id = aws_api_gateway_deployment.main.id
   rest_api_id   = aws_api_gateway_rest_api.main.id
   stage_name    = var.environment
@@ -231,4 +268,9 @@ output "api_resource_id" {
 output "api_arn" {
   description = "ARN of the API Gateway"
   value       = aws_api_gateway_rest_api.main.arn
+}
+
+output "authorizer_id" {
+  description = "ID of the Cognito authorizer"
+  value       = aws_api_gateway_authorizer.cognito.id
 }

@@ -194,3 +194,8 @@ cdk.context.json
 # Miscellaneous
 *.zip
 *.tar.gz
+
+# Temporary task definition files
+*taskdef*.json
+cleaned-taskdef.json
+new-task-def.json

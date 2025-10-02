@@ -120,7 +120,7 @@ variable "db_name" {
 variable "db_username" {
   description = "Username for RDS database"
   type        = string
-  default     = "admin"
+  default     = "appadmin"
   sensitive   = true
 }
 

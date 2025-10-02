@@ -3,6 +3,7 @@
 
 # AWS Configuration
 aws_region = "us-east-1"
+aws_account_id = "875486186130"
 environment = "production"
 project_name = "prodready-infra"
 

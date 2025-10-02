@@ -1,3 +1,12 @@
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      configuration_aliases = [aws.backup_region]
+    }
+  }
+}
+
 variable "environment" {
   description = "Environment name"
   type        = string
@@ -131,7 +140,7 @@ resource "aws_backup_plan" "main" {
     schedule          = "cron(0 5 ? * * *)"  # Daily at 5 AM UTC
     
     lifecycle {
-      cold_storage_after = 30
+      cold_storage_after = var.backup_retention_days >= 120 ? 30 : null
       delete_after       = var.backup_retention_days
     }
     
@@ -147,7 +156,7 @@ resource "aws_backup_plan" "main" {
         destination_vault_arn = aws_backup_vault.cross_region[0].arn
         
         lifecycle {
-          cold_storage_after = 30
+          cold_storage_after = var.backup_retention_days >= 120 ? 30 : null
           delete_after       = var.backup_retention_days
         }
       }

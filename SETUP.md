@@ -198,8 +198,6 @@ The key's randomart image is:
 
 ### Step 4: Create Terraform State S3 Bucket
 
-### Step 4: Create Terraform State S3 Bucket
-
 #### 🗄️ Why Terraform State Management Is Critical
 
 Terraform state files are crucial because they:
@@ -224,40 +222,31 @@ Terraform state files are crucial because they:
    - Avoids corrupted state from simultaneous operations
    - Ensures data consistency
 
-#### Create and Configure S3 Bucket
+#### Create and Configure Remote State Resources
 
 ```bash
-# Create S3 bucket for Terraform state
-aws s3 mb s3://prodready-infra-terraform-state-631876831364 --region us-east-1
+# Bootstrap remote state for staging (creates bucket + lock table if needed)
+make setup-state ENVIRONMENT=staging AWS_REGION=us-east-1
 
-# Enable versioning on the bucket (crucial for state recovery)
-aws s3api put-bucket-versioning \
-  --bucket prodready-infra-terraform-state-631876831364 \
-  --versioning-configuration Status=Enabled
-
-# Verify bucket creation
-aws s3 ls | grep prodready-infra-terraform-state
+# Bootstrap remote state for production
+make setup-state ENVIRONMENT=production AWS_REGION=us-east-1
 ```
 
-**Actual Terminal Output:**
+The `setup-state` target will automatically:
+
+- Create (or reuse) an S3 bucket named `prodready-infra-terraform-state-<aws-account-id>`
+- Enable bucket-wide encryption, versioning, and block all public access
+- Provision a DynamoDB lock table (`terraform-state-lock-<environment>`) for safe concurrent use
+
+Verify the resources afterwards:
+
 ```bash
-AzureAD+AlaminJumaMagoti@DESKTOP-8OQV8SV MINGW64 /c/dev/sides/NewArchitecture (main)
-$ aws s3 mb s3://prodready-infra-terraform-state-631876831364 --region us-east-1
-make_bucket: prodready-infra-terraform-state-631876831364
-
-AzureAD+AlaminJumaMagoti@DESKTOP-8OQV8SV MINGW64 /c/dev/sides/NewArchitecture (main)
-$ aws s3api put-bucket-versioning --bucket prodready-infra-terraform-state-631876831364 --versioning-configuration Status=Enabled
-
-AzureAD+AlaminJumaMagoti@DESKTOP-8OQV8SV MINGW64 /c/dev/sides/NewArchitecture (main)
-$ aws s3 ls | grep prodready-infra-terraform-state
-2025-09-29 XX:XX:XX prodready-infra-terraform-state-631876831364
+aws s3 ls | grep terraform-state
+aws dynamodb describe-table --table-name terraform-state-lock-staging --region us-east-1
+aws dynamodb describe-table --table-name terraform-state-lock-production --region us-east-1
 ```
 
-#### 🔐 S3 Bucket Security Best Practices
-
-- **Bucket Naming**: Includes account ID to ensure global uniqueness
-- **Versioning**: Enabled to recover from accidental state corruption
-- **Region**: Same as your infrastructure to minimize latency
+> � **Tip:** Ensure the backend configuration files under `terraform/backends/` reference the bucket name created by the command above. Update the bucket suffix to match your AWS account ID if necessary.
 - **Access Control**: Only accessible via IAM credentials used for Terraform
 
 ## 🔑 GitHub Secrets Configuration

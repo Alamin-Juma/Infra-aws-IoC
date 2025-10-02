@@ -66,6 +66,8 @@ make setup-state ENVIRONMENT=staging
 make deploy ENVIRONMENT=staging
 ```
 
+> The `setup-state` target provisions (or reuses) the shared S3 bucket `prodready-infra-terraform-state-<aws-account-id>` with versioning, encryption, public access blocks, and the DynamoDB lock table for the specified environment.
+
 #### Production Environment
 ```bash
 # Create Terraform state storage  
@@ -74,6 +76,8 @@ make setup-state ENVIRONMENT=production
 # Deploy production infrastructure
 make deploy ENVIRONMENT=production
 ```
+
+> Re-run the target when onboarding a new environment or AWS account—the commands are idempotent.
 
 ### 3. Application Deployment
 

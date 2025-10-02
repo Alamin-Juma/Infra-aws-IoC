@@ -140,7 +140,7 @@ module "lambda" {
   api_gateway_root_resource_id = module.api_gateway.api_resource_id
   aws_region        = var.aws_region
   aws_account_id    = var.aws_account_id
-  cognito_authorizer_id = module.cognito.user_pool_arn
+  cognito_authorizer_id = module.api_gateway.authorizer_id
 }
 
 # ECS Cluster, Services and Task Definitions
@@ -246,19 +246,6 @@ module "cloudfront" {
 #     }
 #   }
 # }
-
-# WAF for API Gateway protection
-module "waf" {
-  source = "./modules/waf"
-  
-  environment        = var.environment
-  project_name       = var.project_name
-  api_gateway_arn    = module.api_gateway.api_arn
-  allowed_countries  = var.waf_allowed_countries
-  rate_limit         = var.waf_rate_limit
-  
-  depends_on = [module.api_gateway]
-}
 
 # Backup and Disaster Recovery
 module "backup" {
