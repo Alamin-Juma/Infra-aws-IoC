@@ -1,0 +1,8 @@
+{
+  "all": true,
+  "include": ["src/**/*.js"],
+  "exclude": ["node_modules", "dist", "test", "**/*.test.js"],
+  "reporter": ["text", "html"],
+  "report-dir": "./coverage",
+  "check-coverage": true
+}

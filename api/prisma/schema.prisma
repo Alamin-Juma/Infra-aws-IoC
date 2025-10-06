@@ -1,0 +1,854 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "windows"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                            Int                             @id @default(autoincrement())
+  firstName                     String
+  lastName                      String
+  email                         String                          @unique
+  password                      String?                         @default("griffin2021CH19")
+  status                        Boolean                         @default(false)
+  roleName                      String                          @default("employee")
+  createdAt                     DateTime                        @default(now())
+  updatedAt                     DateTime                        @updatedAt
+  lastUpdatedBy                 Int?
+  role                          Role                            @relation(fields: [roleName], references: [name])
+  passwordResets                PasswordReset[]
+  auditTrails                   AuditTrail[]
+  externalRequests              ExternalRequest[]
+  DeviceActivity                DeviceActivity[]
+  submittedQuotations           Quotation[]                     @relation("SubmittedBy")
+  procurementRequest            ProcurementRequest[]
+  procurementRequestItems       ProcurementRequestItem[]
+  financeApprovals              FinanceApproval[]
+  procurementRequestAudits      ProcurementRequestAudit[]
+  vendorAudits                  VendorAudit[]
+  quotationAudits               QuotationAudit[]
+  purchaseOrderAudits           PurchaseOrderAudit[]
+  vendorEvaluations             VendorEvaluation[]
+  updatedQuotations             Quotation[]                     @relation("LastUpdatedBy")
+  purchaseOrders                PurchaseOrder[]
+  assignedTickets               ExternalRequest[]               @relation(name: "Assignee")
+  contractUploadedBy            Contract[]
+  scheduledAudits               Audit[]                         @relation("ScheduledAudits")
+  assignedAudits                Audit[]                         @relation("AssignedAudits")
+  notifications                 Notification[]
+  inventoryAudits               InventoryAudit[]                @relation("AuditsByUser")
+  refreshTokens                 RefreshToken[]
+  auditLogs                     AuditLog[]
+  maintenanceSchedule           MaintenanceSchedule[]
+  maintenanceServiceEntry       MaintenanceServiceEntry[]
+  maintenanceScheduleAssignment MaintenanceScheduleAssignment[]
+  repairDeviceHistory           RepairDeviceHistory[]
+  deletedRepairDevices          RepairDevice[]                  @relation("deletedBy")
+  createdRepairDevices          RepairDevice[]                  @relation("createdBy")
+  deletedRepairRequests         RepairRequest[]                 @relation("deletedRepairRequests")
+  createdRepairRequests         RepairRequest[]                 @relation("createdRepairRequests")
+  assignedToRepairRequests      RepairRequest[]                 @relation("assignedToRepairRequests")
+  assignedByRepairRequests      RepairRequest[]                 @relation("assignedByRepairRequests")
+}
+
+model Role {
+  id                            Int                             @id @default(autoincrement())
+  name                          String                          @unique
+  status                        Boolean                         @default(true)
+  createdAt                     DateTime                        @default(now())
+  updatedAt                     DateTime                        @updatedAt
+  lastUpdatedBy                 Int?
+  users                         User[]
+  rolePermissions               RolePermission[]
+  authorizedRequestTypes        RequestTypeRole[]
+  maintenanceScheduleAssignment MaintenanceScheduleAssignment[]
+}
+
+model RefreshToken {
+  id        Int      @id @default(autoincrement())
+  token     String   @unique
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id])
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  revoked   Boolean  @default(false)
+}
+
+model RolePermission {
+  id            Int        @id @default(autoincrement())
+  roleId        Int
+  permissionId  Int
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  lastUpdatedBy Int?
+  role          Role       @relation(fields: [roleId], references: [id])
+  permission    Permission @relation(fields: [permissionId], references: [id])
+}
+
+model Permission {
+  id              Int              @id @default(autoincrement())
+  name            String           @unique
+  routeName       String
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  lastUpdatedBy   Int?
+  rolePermissions RolePermission[]
+}
+
+model PasswordReset {
+  id            Int       @id @default(autoincrement())
+  userId        Int
+  token         String
+  status        Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  expiresAt     DateTime
+  used_at       DateTime?
+  lastUpdatedBy Int?
+  user          User      @relation(fields: [userId], references: [id])
+}
+
+model AuditTrail {
+  id            Int      @id @default(autoincrement())
+  activity      String
+  performedBy   Int
+  note          String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  lastUpdatedBy Int?
+  user          User     @relation(fields: [performedBy], references: [id])
+  Vendor        Vendor[] @relation("VendorAuditTrail")
+}
+
+model AuditLog {
+  id            Int           @id @default(autoincrement())
+  eventCategory EventCategory
+  action        String
+
+  userId Int?
+  user   User? @relation(fields: [userId], references: [id])
+
+  auditableId   String?
+  auditableType String?
+
+  oldValues Json?
+  newValues Json?
+  meta      Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([eventCategory, action])
+  @@index([auditableType, auditableId])
+  @@index([userId])
+}
+
+enum EventCategory {
+  DATA_CHANGE
+  ENDPOINT
+}
+
+model Device {
+  id                      Int                       @id @default(autoincrement())
+  serialNumber            String                    @unique
+  deviceTypeId            Int
+  manufacturerId          Int
+  deviceConditionId       Int
+  deviceStatusId          Int
+  assignedUser            String?
+  deviceSpecifications    Int?
+  specifications          Json?
+  createdAt               DateTime                  @default(now())
+  updatedAt               DateTime                  @updatedAt
+  deletedAt               DateTime?
+  lastUpdatedBy           Int?
+  deviceType              DeviceType                @relation(fields: [deviceTypeId], references: [id])
+  manufacturer            DeviceManufacturer        @relation(fields: [manufacturerId], references: [id])
+  deviceCondition         DeviceCondition           @relation(fields: [deviceConditionId], references: [id])
+  deviceStatus            DeviceStatus              @relation(fields: [deviceStatusId], references: [id])
+  deviceActivities        DeviceActivity[]
+  ExternalRequest         ExternalRequest[]
+  maintenanceServiceEntry MaintenanceServiceEntry[]
+  repairDevice            RepairDevice[]
+}
+
+model DeviceType {
+  id                         Int                         @id @default(autoincrement())
+  name                       String                      @unique
+  low_stock_limit            Int?
+  specifications             String?
+  status                     Boolean                     @default(true)
+  createdAt                  DateTime                    @default(now())
+  updatedAt                  DateTime                    @updatedAt
+  lastUpdatedBy              Int?
+  devices                    Device[]
+  lineItems                  QuotationItem[]
+  procurementRequestItems    ProcurementRequestItem[]
+  vendorDevices              VendorDeviceType[]
+  items                      PurchaseOrderItem[]
+  audits                     Audit[]
+  inventoryAudits            InventoryAudit[]
+  externalRequestDeviceTypes ExternalRequestDeviceType[]
+  maintenanceSchedule        MaintenanceSchedule[]
+  repairRequest              RepairRequest[]
+}
+
+model DeviceSpecification {
+  specification_id Int      @id @default(autoincrement())
+  name             String   @unique
+  fieldType        String?
+  selectOptions    String[]
+  status           Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  lastUpdatedBy    Int?
+}
+
+model DeviceCondition {
+  id             Int      @id @default(autoincrement())
+  name           String   @unique
+  status         Boolean  @default(true)
+  deviceCategory String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  lastUpdatedBy  Int?
+  devices        Device[]
+}
+
+model DeviceStatus {
+  id            Int      @id @default(autoincrement())
+  name          String   @unique
+  status        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  lastUpdatedBy Int?
+  devices       Device[]
+}
+
+model DeviceManufacturer {
+  id            Int      @id @default(autoincrement())
+  name          String   @unique
+  status        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  lastUpdatedBy Int?
+  devices       Device[]
+}
+
+model DeviceActivity {
+  id             Int          @id @default(autoincrement())
+  deviceId       Int
+  performedBy    Int
+  activityTypeId Int
+  description    String?
+  deviceStatusId Int
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  deletedAt      DateTime?
+  lastUpdatedBy  Int?
+  device         Device       @relation(fields: [deviceId], references: [id])
+  user           User         @relation(fields: [performedBy], references: [id])
+  activityType   ActivityType @relation(fields: [activityTypeId], references: [id])
+}
+
+model DeviceInventory {
+  id            Int                   @id @default(autoincrement())
+  deviceType    String
+  serial        String                @unique
+  expectedCount Int
+  actualCount   Int?
+  status        InventoryDeviceStatus @default(AVAILABLE)
+  updatedAt     DateTime              @updatedAt
+}
+
+enum InventoryDeviceStatus {
+  AVAILABLE
+  UNAVAILABLE
+}
+
+model ActivityType {
+  id               Int              @id @default(autoincrement())
+  name             String           @unique
+  status           Boolean          @default(true)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  lastUpdatedBy    Int?
+  deviceActivities DeviceActivity[]
+}
+
+enum RequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  ASSIGNED
+  IN_PROGRESS
+  HOLD
+  COMPLETED
+  CANCELLED
+}
+
+model ExternalRequest {
+  id                         Int                         @id @default(autoincrement())
+  deviceId                   Int?
+  userId                     Int?
+  requestTypeId              Int
+  deviceTypeId               Int?
+  email                      String
+  descriptions               String?
+  notes                      String?
+  status                     Boolean                     @default(true)
+  requestStatus              RequestStatus               @default(PENDING)
+  assignedUser               Int?
+  createdAt                  DateTime                    @default(now())
+  updatedAt                  DateTime                    @updatedAt
+  lastUpdatedBy              Int?
+  user                       User?                       @relation(fields: [userId], references: [id])
+  assignee                   User?                       @relation(name: "Assignee", fields: [assignedUser], references: [id])
+  device                     Device?                     @relation(fields: [deviceId], references: [id])
+  requestType                RequestType                 @relation(fields: [requestTypeId], references: [id])
+  ticketTrails               TicketTrail[]
+  externalRequestDeviceTypes ExternalRequestDeviceType[]
+}
+
+model ExternalRequestDeviceType {
+  id                Int             @id @default(autoincrement())
+  externalRequestId Int
+  deviceTypeId      Int
+  quantity          Int
+  createdAt         DateTime        @default(now())
+  externalRequest   ExternalRequest @relation(fields: [externalRequestId], references: [id])
+  deviceType        DeviceType      @relation(fields: [deviceTypeId], references: [id])
+}
+
+model RequestType {
+  id               Int               @id @default(autoincrement())
+  name             String            @unique
+  label            String?
+  status           Boolean           @default(true)
+  restrict         Boolean           @default(false)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  lastUpdatedBy    Int?
+  authorizedRoles  RequestTypeRole[]
+  externalRequests ExternalRequest[]
+}
+
+model RequestTypeRole {
+  requestTypeId Int
+  roleId        Int
+  assignedAt    DateTime @default(now())
+
+  requestType RequestType @relation(fields: [requestTypeId], references: [id])
+  role        Role        @relation(fields: [roleId], references: [id])
+
+  @@id([requestTypeId, roleId])
+}
+
+model TicketTrail {
+  id                Int      @id @default(autoincrement())
+  ticketId          String   @unique
+  narration         String
+  externalRequestId Int
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  externalRequest ExternalRequest @relation(fields: [externalRequestId], references: [id])
+}
+
+enum Category {
+  Category1
+  Category2
+  Custom
+}
+
+enum ProcurementRequestStatus {
+  Draft
+  Pending
+  Submitted
+  Approved
+  Quoted
+  Rejected
+  Fulfilled
+}
+
+model ProcurementRequestItem {
+  id                   Int                      @id @default(autoincrement())
+  deviceTypeId         Int
+  status               ProcurementRequestStatus @default(Draft)
+  deviceType           DeviceType               @relation(fields: [deviceTypeId], references: [id])
+  category             Category?                @default(Category1)
+  quantity             Int
+  specification        String?
+  createdAt            DateTime                 @default(now())
+  updatedAt            DateTime                 @updatedAt
+  submittedAt          DateTime?                @default(now())
+  deletedAt            DateTime?
+  userId               Int
+  submittedBy          User                     @relation(fields: [userId], references: [id])
+  procurementRequestId Int?
+  procurementRequest   ProcurementRequest?      @relation(fields: [procurementRequestId], references: [id])
+}
+
+model ProcurementRequest {
+  id                      Int                      @id @default(autoincrement())
+  requestNumber           String?                  @unique
+  status                  ProcurementRequestStatus @default(Draft)
+  justification           String?
+  expectedDelivery        DateTime
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
+  approvalReason          String?
+  rejectionReason         String?
+  moreInfo                String?
+  procurementRequestItems ProcurementRequestItem[]
+  CreatedBy               User?                    @relation(fields: [createdById], references: [id])
+  createdById             Int?
+  quotations              Quotation[]
+}
+
+enum QuotationStatus {
+  Pending
+  Submitted
+  Approved
+  Rejected
+}
+
+model Quotation {
+  id                   Int                 @id @default(autoincrement())
+  quotationId          String              @unique
+  vendorId             Int
+  vendor               Vendor              @relation(fields: [vendorId], references: [id])
+  submittedById        Int
+  submittedBy          User?               @relation(fields: [submittedById], references: [id], name: "SubmittedBy")
+  procurementRequestId Int?
+  procurementRequest   ProcurementRequest? @relation(fields: [procurementRequestId], references: [id])
+  totalAmount          Float               @default(0.0)
+  status               QuotationStatus     @default(Submitted)
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+  lastUpdatedById      Int?
+  lastUpdatedBy        User?               @relation(fields: [lastUpdatedById], references: [id], name: "LastUpdatedBy")
+  rejectionReason      String?
+  lineItems            QuotationItem[]
+  financeApproval      FinanceApproval[]
+  purchaseOrder        PurchaseOrder[]
+}
+
+model QuotationItem {
+  id                   Int        @id @default(autoincrement())
+  quotationId          Int
+  quotation            Quotation  @relation(fields: [quotationId], references: [id])
+  deviceTypeId         Int
+  deviceType           DeviceType @relation(fields: [deviceTypeId], references: [id])
+  deviceTypeName       String?
+  quantity             Int        @default(1)
+  unitPrice            Float
+  totalPrice           Float      @default(0.0)
+  specification        String?
+  justification        String?
+  expectedDeliveryDate DateTime?
+  createdAt            DateTime   @default(now())
+  updatedAt            DateTime   @updatedAt
+  lastUpdatedBy        Int?
+}
+
+enum EvaluationFrequency {
+  QUARTERLY
+  ANNUALLY
+}
+
+enum NotificationType {
+  INFO
+  ALERT
+  TASK
+}
+
+model Notification {
+  id        Int              @id @default(autoincrement())
+  userId    Int
+  user      User             @relation(fields: [userId], references: [id])
+  title     String
+  message   String
+  type      NotificationType
+  link      String
+  read      Boolean          @default(false)
+  dismissed Boolean          @default(false)
+  timestamp DateTime         @default(now())
+}
+
+model Vendor {
+  id                  Int                   @id @default(autoincrement())
+  name                String                @unique
+  phone               String?
+  email               String?               @unique
+  physicalAddress     String?
+  deviceTypeSupplied  String?
+  contractStartDate   DateTime?
+  contractEndDate     DateTime?
+  status              VendorStatus          @default(ACTIVE)
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+  quotations          Quotation[]
+  vendorAudits        VendorAudit[]
+  auditTrails         AuditTrail[]          @relation("VendorAuditTrail")
+  vendorDevices       VendorDeviceType[]
+  evaluations         VendorEvaluation[]
+  deletedAt           DateTime?
+  PurchaseOrder       PurchaseOrder[]
+  contracts           Contract[]
+  lastEvaluationDate  DateTime?
+  repairDeviceHistory RepairDeviceHistory[]
+}
+
+model Contract {
+  id                 Int       @id @default(autoincrement())
+  fileName           String
+  filePath           String
+  uploadedBy         String?
+  uploadedById       Int?
+  uploadDate         DateTime  @default(now())
+  startDate          DateTime
+  endDate            DateTime
+  vendor             Vendor    @relation(fields: [vendorId], references: [id])
+  vendorId           Int
+  contractUploadedBy User?     @relation(fields: [uploadedById], references: [id])
+  deletedAt          DateTime?
+}
+
+model VendorEvaluation {
+  id                     Int      @id @default(autoincrement())
+  vendorId               Int
+  vendor                 Vendor   @relation(fields: [vendorId], references: [id])
+  evaluatorId            Int
+  evaluator              User     @relation(fields: [evaluatorId], references: [id])
+  deliveryTimeliness     Int
+  productQuality         Int
+  pricingCompetitiveness Int
+  customerService        Int
+  complianceAndSecurity  Int?
+  innovation             Int?
+  comments               String?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+}
+
+model VendorDeviceType {
+  id            Int        @id @default(autoincrement())
+  vendorId      Int
+  deviceId      Int
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  deletedAt     DateTime?
+  lastUpdatedBy Int?
+  vendor        Vendor     @relation(fields: [vendorId], references: [id])
+  deviceType    DeviceType @relation(fields: [deviceId], references: [id])
+}
+
+enum VendorStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum FinanceApprovalStatus {
+  PENDING
+  PO_SENT
+  APPROVED
+  REJECTED
+}
+
+model FinanceApproval {
+  id              Int                   @id @default(autoincrement())
+  quotationId     Int
+  quotation       Quotation             @relation(fields: [quotationId], references: [id])
+  submittedBy     String
+  submissionDate  DateTime
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+  totalAmount     Float
+  status          FinanceApprovalStatus @default(PENDING)
+  lastUpdatedById Int
+  lastUpdatedBy   User                  @relation(fields: [lastUpdatedById], references: [id])
+}
+
+model PurchaseOrder {
+  id              Int                 @id @default(autoincrement())
+  poNumber        String              @unique
+  vendorId        Int
+  totalAmount     Float
+  status          String
+  createdByUserId Int
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  vendor          Vendor              @relation(fields: [vendorId], references: [id])
+  createdByUser   User                @relation(fields: [createdByUserId], references: [id])
+  items           PurchaseOrderItem[]
+  Quotation       Quotation?          @relation(fields: [quotationId], references: [id])
+  quotationId     Int?
+}
+
+model PurchaseOrderItem {
+  id                   Int           @id @default(autoincrement())
+  purchaseOrderId      Int
+  deviceTypeId         Int
+  quantity             Int
+  unitPrice            Float
+  totalPrice           Float
+  specification        String
+  expectedDeliveryDate DateTime
+  deviceType           DeviceType    @relation(fields: [deviceTypeId], references: [id])
+  purchaseOrder        PurchaseOrder @relation(fields: [purchaseOrderId], references: [id])
+}
+
+model ProcurementRequestAudit {
+  id           Int      @id @default(autoincrement())
+  action       Json
+  actionType   String
+  performedBy  Int
+  previousData Json?
+  updatedBy    Int?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  user         User     @relation(fields: [performedBy], references: [id])
+}
+
+model VendorAudit {
+  id           Int      @id @default(autoincrement())
+  action       Json
+  actionType   String
+  performedBy  Int
+  previousData Json?
+  updatedBy    Int?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  user         User     @relation(fields: [performedBy], references: [id])
+  vendorId     Int
+  vendor       Vendor   @relation(fields: [vendorId], references: [id])
+}
+
+model QuotationAudit {
+  id           Int      @id @default(autoincrement())
+  action       Json
+  actionType   String
+  performedBy  Int
+  previousData Json?
+  updatedBy    Int?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  user         User     @relation(fields: [performedBy], references: [id])
+}
+
+model PurchaseOrderAudit {
+  id           Int      @id @default(autoincrement())
+  action       Json
+  actionType   String
+  performedBy  Int
+  previousData Json?
+  updatedBy    Int?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  user         User     @relation(fields: [performedBy], references: [id])
+}
+
+model InventoryAudit {
+  id              Int        @id @default(autoincrement())
+  expectedCount   Int?
+  deviceTypeId    Int
+  auditDate       DateTime
+  serial          String
+  quantityCounted Int
+  notes           String?
+  createdById     Int
+  deviceType      DeviceType @relation(fields: [deviceTypeId], references: [id])
+  createdBy       User       @relation("AuditsByUser", fields: [createdById], references: [id])
+  createdAt       DateTime   @default(now())
+}
+
+model Frequency {
+  id     Int     @id @default(autoincrement())
+  name   String  @unique
+  audits Audit[]
+}
+
+model AuditStatus {
+  id     Int     @id @default(autoincrement())
+  name   String  @unique
+  audits Audit[]
+}
+
+model Audit {
+  id           String   @id @default(uuid())
+  ticketNumber String   @unique
+  auditDate    DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  deviceTypeId Int
+  deviceType   DeviceType @relation(fields: [deviceTypeId], references: [id])
+
+  frequencyId Int
+  frequency   Frequency @relation(fields: [frequencyId], references: [id])
+
+  statusId Int
+  status   AuditStatus @relation(fields: [statusId], references: [id])
+
+  scheduledById Int
+  scheduledBy   User @relation("ScheduledAudits", fields: [scheduledById], references: [id])
+
+  assignedToId Int?
+  assignedTo   User? @relation("AssignedAudits", fields: [assignedToId], references: [id])
+}
+
+model RecurrencePattern {
+  id                   Int                   @id @default(autoincrement())
+  name                 String                @unique
+  frequency            Int?
+  unit                 String
+  description          String?
+  isActive             Boolean
+  isDeleted            Boolean               @default(false)
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  deletedAt            DateTime?
+  maintenanceSchedules MaintenanceSchedule[]
+}
+
+model MaintenanceSchedule {
+  id                  Int            @id @default(autoincrement())
+  title               String
+  recurring           Boolean        @default(false)
+  nextDue             DateTime       @default(now())
+  endDate             DateTime?
+  submittedBy         Int
+  deviceTypeId        Int
+  location            String?
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+  status              ScheduleStatus @default(PENDING)
+  recurrencePatternId Int
+  isCancelled         Boolean        @default(false)
+  deletedAt           DateTime?
+
+  assignment        MaintenanceScheduleAssignment[]
+  submitter         User                            @relation(fields: [submittedBy], references: [id])
+  deviceType        DeviceType                      @relation(fields: [deviceTypeId], references: [id])
+  recurrencePattern RecurrencePattern               @relation(fields: [recurrencePatternId], references: [id])
+  serviceEntries    MaintenanceServiceEntry[]
+}
+
+enum ScheduleStatus {
+  PENDING
+  IN_PROGRESS
+  UPCOMING
+  COMPLETED
+}
+
+model MaintenanceScheduleAssignment {
+  id                    Int      @id @default(autoincrement())
+  assignedAt            DateTime @default(now())
+  maintenanceScheduleId Int
+  assignedUserId        Int?
+  assignedRoleId        Int?
+
+  assignedToUser      User?               @relation(fields: [assignedUserId], references: [id])
+  assignedToRole      Role?               @relation(fields: [assignedRoleId], references: [id])
+  maintenanceSchedule MaintenanceSchedule @relation(fields: [maintenanceScheduleId], references: [id])
+}
+
+model MaintenanceServiceEntry {
+  id                    Int                @id @default(autoincrement())
+  notes                 String?
+  maintenanceScheduleId Int
+  status                ServiceEntryStatus
+  deviceId              Int
+  actionBy              Int
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+
+  maintenanceSchedule MaintenanceSchedule @relation(fields: [maintenanceScheduleId], references: [id])
+  device              Device              @relation(fields: [deviceId], references: [id])
+  actor               User                @relation(fields: [actionBy], references: [id])
+}
+
+enum ServiceEntryStatus {
+  PENDING
+  IN_PROGRESS
+  SERVICED
+}
+
+// Repair request related models and enums
+enum RepairRequestStatus {
+  SUBMITTED
+  IN_PROGRESS
+  COMPLETED
+}
+
+model RepairRequest {
+  id            Int                 @id @default(autoincrement())
+  deviceTypeId  Int
+  deviceType    DeviceType          @relation(fields: [deviceTypeId], references: [id])
+  severity      String              @db.VarChar(32)
+  location      String?             @db.VarChar(255)
+  currentStatus RepairRequestStatus @default(SUBMITTED)
+  description   String
+  createdAt     DateTime            @default(now())
+  createdById   Int
+  createdBy     User                @relation("createdRepairRequests", fields: [createdById], references: [id])
+  assignedToId  Int?
+  assignedTo    User?               @relation("assignedToRepairRequests", fields: [assignedToId], references: [id])
+  assignedOn    DateTime?
+  assignedById  Int?
+  assignedBy    User?               @relation("assignedByRepairRequests", fields: [assignedById], references: [id])
+  isDeleted     Boolean
+  deletedOn     DateTime?
+  deletedById   Int?
+  deletedBy     User?               @relation("deletedRepairRequests", fields: [deletedById], references: [id])
+  repairDevices RepairDevice[]
+}
+
+enum RepairDeviceStatus {
+  PENDING
+  IN_PROGRESS
+  FIXED
+  RETIRED
+  ASSIGNED_TO_VENDOR
+}
+
+model RepairDevice {
+  id                  Int                   @id @default(autoincrement())
+  repairRequestId     Int
+  repairRequest       RepairRequest?        @relation(fields: [repairRequestId], references: [id])
+  deviceId            Int
+  device              Device?               @relation(fields: [deviceId], references: [id])
+  currentStatus       RepairDeviceStatus    @default(PENDING)
+  createdOn           DateTime              @default(now())
+  createdById         Int
+  createdBy           User                  @relation("createdBy", fields: [createdById], references: [id])
+  isDeleted           Boolean
+  deletedOn           DateTime?
+  deletedById         Int?
+  deletedBy           User?                  @relation("deletedBy", fields: [deletedById], references: [id])
+  repairDeviceHistory RepairDeviceHistory[]
+}
+
+model RepairDeviceHistory {
+  id             Int                @id @default(autoincrement())
+  repairDeviceId Int?
+  repairDevice   RepairDevice?      @relation(fields: [repairDeviceId], references: [id])
+  deviceStatus   RepairDeviceStatus
+  createdOn      DateTime           @default(now())
+  createdById    Int
+  createdBy      User               @relation(fields: [createdById], references: [id])
+  vendorId       Int?
+  vendor         Vendor?            @relation(fields: [vendorId], references: [id])
+  notes          String?
+}

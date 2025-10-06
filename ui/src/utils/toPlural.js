@@ -1,0 +1,1 @@
+export const plural = str => str.endsWith('s') ? str : str + 's';
