@@ -84,6 +84,7 @@ terraform.rc
 
 # Terraform environment files - keep examples and staging
 *.tfvars
+*.secrets.tfvars
 !terraform.tfvars.example
 !terraform/environments/*.tfvars
 !terraform/environments/staging.tfvars

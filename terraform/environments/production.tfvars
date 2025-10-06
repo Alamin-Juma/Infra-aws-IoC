@@ -14,7 +14,7 @@ public_subnets = ["10.0.1.0/24", "10.0.2.0/24", "10.0.3.0/24"]
 private_subnets = ["10.0.10.0/24", "10.0.11.0/24", "10.0.12.0/24"]
 
 # Application Configuration
-app_port = 8080
+app_port = 9000
 health_check_path = "/health"
 
 # Security Configuration (VPN/Bastion access only)
@@ -22,7 +22,7 @@ allowed_ips = ["10.0.100.0/24"]  # VPN subnet only
 allowed_domains = ["prodready-infra.com"]
 
 # Database Configuration (Non-Sensitive)
-db_name = "prodready_infra_production"
+db_name = "itrack"
 db_instance_class = "db.r5.large"  # Larger instance for production
 
 # ECS Configuration (Production scale)

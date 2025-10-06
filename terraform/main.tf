@@ -9,11 +9,11 @@ terraform {
   required_version = ">= 1.3.0"
 
   backend "s3" {
-    bucket = "prodready-infra-terraform-state"
+    bucket = "prodready-infra-terraform-state-875486186130"
     key    = "prodready-infra/production/terraform.tfstate"
     region = "us-east-1"
     # Enable DynamoDB state locking
-    dynamodb_table = "terraform-state-lock"
+    dynamodb_table = "terraform-state-lock-production"
     encrypt        = true
   }
 }
@@ -75,8 +75,8 @@ module "ecr" {
   source = "./modules/ecr"
   
   repositories = [
-    "${var.project_name}-frontend",
-    "${var.project_name}-backend"
+    "${var.project_name}-ui",
+    "${var.project_name}-api"
   ]
   environment = var.environment
 }
@@ -156,8 +156,8 @@ module "ecs" {
     lb      = module.security_groups.lb_security_group_id,
     ecs     = module.security_groups.ecs_security_group_id
   }
-  backend_image      = "${module.ecr.repository_urls["${var.project_name}-backend"]}:latest"
-  frontend_image     = "${module.ecr.repository_urls["${var.project_name}-frontend"]}:latest"
+  backend_image      = "${module.ecr.repository_urls["${var.project_name}-api"]}:latest"
+  frontend_image     = "${module.ecr.repository_urls["${var.project_name}-ui"]}:latest"
   container_port     = var.app_port
   desired_count      = var.ecs_desired_count
   cpu                = var.ecs_cpu

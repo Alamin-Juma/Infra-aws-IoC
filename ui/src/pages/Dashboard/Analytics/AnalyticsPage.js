@@ -7,7 +7,7 @@ import IncidentChart from "../../../components/Charts/IncidentChart";
 import { CountUp } from "use-count-up";
 import api from "../../../utils/apiInterceptor";
 import { formatDate } from "../../../utils/formatDate";
-import { toSentenceCase } from "../../../../../api/src/components/dashboard_stats/sentenceCaseHelper";
+import { toSentenceCase } from "../../../utils/toSentenceCase";
 import { useNavigate } from "react-router-dom";
 import { toPascalCase } from "../../../utils/toPascalCase";
 import Slider from "react-slick";

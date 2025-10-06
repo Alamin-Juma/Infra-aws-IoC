@@ -54,7 +54,7 @@ variable "allowed_ips" {
 variable "app_port" {
   description = "Port the application runs on"
   type        = number
-  default     = 8080
+  default     = 9000
 }
 
 variable "health_check_path" {
@@ -114,7 +114,7 @@ variable "dynamodb_tables" {
 variable "db_name" {
   description = "Name of the RDS database"
   type        = string
-  default     = "prodready_infra"
+  default     = "itrack"
 }
 
 variable "db_username" {
