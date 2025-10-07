@@ -1,0 +1,52 @@
+{
+    "family": "prodready-infra-frontend-staging",
+    "taskRoleArn": "arn:aws:iam::875486186130:role/prodready-infra-task-role-staging",
+    "executionRoleArn": "arn:aws:iam::875486186130:role/prodready-infra-task-execution-role-staging",
+    "networkMode": "awsvpc",
+    "requiresCompatibilities": ["FARGATE"],
+    "cpu": "256",
+    "memory": "512",
+    "containerDefinitions": [
+        {
+            "name": "prodready-infra-frontend",
+            "image": "875486186130.dkr.ecr.us-east-1.amazonaws.com/prodready-infra-ui:latest-fixed",
+            "cpu": 0,
+            "portMappings": [
+                {
+                    "containerPort": 80,
+                    "hostPort": 80,
+                    "protocol": "tcp"
+                }
+            ],
+            "essential": true,
+            "environment": [
+                {
+                    "name": "NODE_ENV",
+                    "value": "staging"
+                },
+                {
+                    "name": "REACT_APP_API_URL",
+                    "value": "http://prodready-infra-alb-staging-212250592.us-east-1.elb.amazonaws.com/api"
+                }
+            ],
+            "logConfiguration": {
+                "logDriver": "awslogs",
+                "options": {
+                    "awslogs-group": "/ecs/prodready-infra-frontend-staging",
+                    "awslogs-region": "us-east-1",
+                    "awslogs-stream-prefix": "ecs"
+                }
+            },
+            "healthCheck": {
+                "command": [
+                    "CMD-SHELL",
+                    "curl -f http://localhost/ || exit 1"
+                ],
+                "interval": 30,
+                "timeout": 10,
+                "retries": 3,
+                "startPeriod": 60
+            }
+        }
+    ]
+}

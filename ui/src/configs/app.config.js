@@ -7,7 +7,7 @@ const config = {
         'thejitu.com',
         'loca.lt'
     ],
-    API_BASE_URL: currentDomain.includes('localhost') ? 'http://localhost:9000' : 'https://rsfeb25-api.gsgus.com',
+    API_BASE_URL: currentDomain.includes('localhost') ? 'http://localhost:9000' : 'http://prodready-infra-alb-staging-212250592.us-east-1.elb.amazonaws.com/api',
     FRONTEND_URL_PROD: 'https://rsfeb25.gsgus.com',
     ACCESS_TOKEN_NAME: 'access_token',
     REFRESH_TOKEN_NAME: 'refresh_token',

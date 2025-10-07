@@ -79,7 +79,7 @@ resource "aws_backup_vault" "cross_region" {
   count    = var.enable_cross_region_backup ? 1 : 0
   provider = aws.backup_region
   
-  name        = "${var.project_name}-backup-vault-cross-region-${var.environment}"
+  name        = "${var.project_name}-backup-cross-${var.environment}"
   kms_key_arn = aws_kms_key.backup_key_cross_region[0].arn
   
   tags = {
@@ -210,7 +210,7 @@ resource "aws_backup_selection" "dynamodb_backup" {
   count = length(var.dynamodb_table_names) > 0 ? 1 : 0
   
   iam_role_arn = aws_iam_role.backup_role.arn
-  name         = "${var.project_name}-dynamodb-backup-selection-${var.environment}"
+  name         = "${var.project_name}-ddb-backup-${var.environment}"
   plan_id      = aws_backup_plan.main.id
   
   resources = [

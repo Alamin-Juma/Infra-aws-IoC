@@ -27,21 +27,6 @@ COPY nginx.conf /etc/nginx/nginx.conf
 # Copy built application from builder stage
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-# Create non-root user
-RUN addgroup -g 1001 -S nodejs
-RUN adduser -S nodejs -u 1001
-
-# Change ownership
-RUN chown -R nodejs:nodejs /usr/share/nginx/html
-RUN chown -R nodejs:nodejs /var/cache/nginx
-RUN chown -R nodejs:nodejs /var/log/nginx
-RUN chown -R nodejs:nodejs /etc/nginx/conf.d
-RUN touch /var/run/nginx.pid
-RUN chown -R nodejs:nodejs /var/run/nginx.pid
-
-# Switch to non-root user
-USER nodejs
-
 # Expose port 80
 EXPOSE 80
 

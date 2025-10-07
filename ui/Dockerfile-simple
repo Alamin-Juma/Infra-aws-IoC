@@ -1,0 +1,21 @@
+FROM nginx:alpine
+
+# Install curl for health checks
+RUN apk add --no-cache curl
+
+# Copy simplified nginx config
+COPY nginx-simple.conf /etc/nginx/nginx.conf
+
+# Create a simple HTML file for testing
+RUN mkdir -p /usr/share/nginx/html
+RUN echo '<!DOCTYPE html><html><head><title>App is Working</title></head><body><h1>Frontend is working!</h1><p>This is a basic test page to verify that the frontend service is operational.</p></body></html>' > /usr/share/nginx/html/index.html
+
+# Expose port 80
+EXPOSE 80
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost/health || exit 1
+
+# Start nginx
+CMD ["nginx", "-g", "daemon off;"]

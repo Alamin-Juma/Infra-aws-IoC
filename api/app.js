@@ -127,6 +127,7 @@ app.use('/doc', uploadCSVRoute);
 app.use('/forgot-password', passwordResetRoute);
 app.use('/auth', loginRoutes);
 app.use('/health', Health);
+app.use('/api/health', Health);
 app.use('/api/specifications', deviceSpecRoutes);
 app.use('/deviceTypes', deviceTypeRoute);
 app.use('/manufacturer', manufacturerRoute);
