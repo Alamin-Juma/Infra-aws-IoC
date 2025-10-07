@@ -9,8 +9,8 @@ on:
 env:
   AWS_REGION: us-east-1
   ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com
-  BACKEND_REPOSITORY: prodready-infra-backend
-  FRONTEND_REPOSITORY: prodready-infra-frontend
+  BACKEND_REPOSITORY: prodready-infra-api
+  FRONTEND_REPOSITORY: prodready-infra-ui
 
 jobs:
   test:
@@ -27,37 +27,37 @@ jobs:
         node-version: '18'
         cache: 'npm'
         cache-dependency-path: |
-          backend/package-lock.json
-          frontend/package-lock.json
+          api/package-lock.json
+          ui/package-lock.json
 
     - name: Install Backend Dependencies
       run: |
-        cd backend
+        cd api
         npm ci
 
     - name: Install Frontend Dependencies
       run: |
-        cd frontend
+        cd ui
         npm ci
 
     - name: Run Backend Tests
       run: |
-        cd backend
+        cd api
         npm test
 
     - name: Run Frontend Tests
       run: |
-        cd frontend
+        cd ui
         npm test -- --coverage --watchAll=false
 
     - name: Run ESLint on Backend
       run: |
-        cd backend
+        cd api
         npx eslint . --ext .js --max-warnings 0
 
     - name: Run ESLint on Frontend
       run: |
-        cd frontend
+        cd ui
         npx eslint src --ext .js,.jsx --max-warnings 0
 
   security-scan:
@@ -85,12 +85,12 @@ jobs:
 
     - name: Audit Backend Dependencies
       run: |
-        cd backend
+        cd api
         npm audit --audit-level high
 
     - name: Audit Frontend Dependencies
       run: |
-        cd frontend
+        cd ui
         npm audit --audit-level high
 
   terraform-validate:
@@ -157,7 +157,7 @@ jobs:
 
     - name: Build and push Backend image
       run: |
-        cd backend
+        cd api
         docker build -t $ECR_REGISTRY/$BACKEND_REPOSITORY:$GITHUB_SHA .
         docker push $ECR_REGISTRY/$BACKEND_REPOSITORY:$GITHUB_SHA
         docker tag $ECR_REGISTRY/$BACKEND_REPOSITORY:$GITHUB_SHA $ECR_REGISTRY/$BACKEND_REPOSITORY:latest
@@ -165,7 +165,7 @@ jobs:
 
     - name: Build and push Frontend image
       run: |
-        cd frontend
+        cd ui
         docker build -t $ECR_REGISTRY/$FRONTEND_REPOSITORY:$GITHUB_SHA .
         docker push $ECR_REGISTRY/$FRONTEND_REPOSITORY:$GITHUB_SHA
         docker tag $ECR_REGISTRY/$FRONTEND_REPOSITORY:$GITHUB_SHA $ECR_REGISTRY/$FRONTEND_REPOSITORY:latest

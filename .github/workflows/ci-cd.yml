@@ -9,12 +9,12 @@ on:
 
 env:
   AWS_REGION: us-east-1
-  ECR_BACKEND_REPOSITORY: prodready-infra-backend
-  ECR_FRONTEND_REPOSITORY: prodready-infra-frontend
-  ECS_CLUSTER: prodready-infra-cluster
-  ECS_BACKEND_SERVICE: prodready-infra-backend-service
-  ECS_FRONTEND_SERVICE: prodready-infra-frontend-service
-  S3_BUCKET: prodready-infra-assets-production
+  ECR_BACKEND_REPOSITORY: prodready-infra-api
+  ECR_FRONTEND_REPOSITORY: prodready-infra-ui
+  ECS_CLUSTER: prodready-infra-ecs-cluster-staging
+  ECS_BACKEND_SERVICE: prodready-infra-backend-service-staging
+  ECS_FRONTEND_SERVICE: prodready-infra-frontend-service-staging
+  S3_BUCKET: prodready-infra-assets-staging
 
 jobs:
   terraform:
@@ -84,7 +84,7 @@ jobs:
         uses: aws-actions/amazon-ecr-login@v1
       
       - name: Build, tag, and push backend image to Amazon ECR
-        working-directory: ./backend
+        working-directory: ./api
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.sha }}
@@ -119,7 +119,7 @@ jobs:
         uses: aws-actions/amazon-ecr-login@v1
       
       - name: Build, tag, and push frontend image to Amazon ECR
-        working-directory: ./frontend
+        working-directory: ./ui
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.sha }}
@@ -137,10 +137,10 @@ jobs:
         with:
           node-version: '18'
           cache: 'npm'
-          cache-dependency-path: './frontend/package-lock.json'
+          cache-dependency-path: './ui/package-lock.json'
       
       - name: Install dependencies and build
-        working-directory: ./frontend
+        working-directory: ./ui
         run: |
           # Use npm ci if package-lock.json exists, otherwise use npm install
           if [ -f package-lock.json ]; then
@@ -151,7 +151,7 @@ jobs:
           npm run build
       
       - name: Deploy to S3
-        working-directory: ./frontend/build
+        working-directory: ./ui/build
         run: |
           aws s3 sync . s3://$S3_BUCKET --delete
       
@@ -196,17 +196,17 @@ jobs:
           node-version: '20'
       
       - name: Install backend dependencies
-        working-directory: ./backend
+        working-directory: ./api
         run: npm ci
       
       - name: Run backend tests
-        working-directory: ./backend
+        working-directory: ./api
         run: npm test
       
       - name: Install frontend dependencies
-        working-directory: ./frontend
+        working-directory: ./ui
         run: npm ci
       
       - name: Run frontend tests
-        working-directory: ./frontend
+        working-directory: ./ui
         run: npm test
