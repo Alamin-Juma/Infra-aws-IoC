@@ -9,7 +9,6 @@ yarn-debug.log*
 yarn-error.log*
 lerna-debug.log*
 .pnpm-debug.log*
-package-lock.json
 yarn.lock
 .yarn/
 jspm_packages/
@@ -197,6 +196,8 @@ cdk.context.json
 *.tar.gz
 
 # Temporary task definition files
-*taskdef*.json
 cleaned-taskdef.json
 new-task-def.json
+task-def-new.json
+task-def-v*.json
+*-taskdef*.json

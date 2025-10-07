@@ -30,6 +30,10 @@ COPY . .
 # Generate Prisma client
 RUN npx prisma generate
 
+# Copy startup script and make it executable
+COPY start.sh .
+RUN chmod +x start.sh
+
 # Skip Puppeteer downloading Chromium
 ENV PUPPETEER_SKIP_DOWNLOAD=true
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
@@ -50,7 +54,7 @@ EXPOSE 9000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:9000/health || exit 1
+  CMD curl -f http://localhost:8080/api/health || exit 1
 
 # Start the application
-CMD ["node", "index.js"]
+CMD ["./start.sh"]
