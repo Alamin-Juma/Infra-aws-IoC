@@ -216,7 +216,16 @@ deploy-apps: build-all push-all
 		--service $(PROJECT_NAME)-frontend-service-$(ENVIRONMENT) \
 		--force-new-deployment
 
-deploy: deploy-infra deploy-apps
+deploy: import-ecr deploy-infra deploy-apps
+
+# Import existing ECR repositories
+.PHONY: import-ecr
+import-ecr:
+    @echo "Importing existing ECR repositories..."
+    cd $(TF_DIR) && \
+    terraform import 'module.ecr.aws_ecr_repository.repos["$(PROJECT_NAME)-api"]' $(PROJECT_NAME)-api || true && \
+    terraform import 'module.ecr.aws_ecr_repository.repos["$(PROJECT_NAME)-ui"]' $(PROJECT_NAME)-ui || true
+    @echo "ECR repositories imported successfully."
 
 # Clean up temporary files
 .PHONY: clean

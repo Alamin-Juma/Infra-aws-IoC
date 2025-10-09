@@ -130,6 +130,37 @@ jobs:
         env:
           TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
 
+      - name: Import existing ECR repositories
+        run: |
+          cd terraform
+          
+          # Check and import prodready-infra-api repository
+          if ! terraform state list | grep -q "module.ecr.aws_ecr_repository.repos\[\"prodready-infra-api\"\]"; then
+            echo "📦 Checking if prodready-infra-api repository exists in AWS..."
+            if aws ecr describe-repositories --repository-names prodready-infra-api --region ${{ env.AWS_REGION }} > /dev/null 2>&1; then
+              echo "✅ Repository exists, importing into Terraform state..."
+              terraform import 'module.ecr.aws_ecr_repository.repos["prodready-infra-api"]' prodready-infra-api || echo "⚠️ Import failed or resource already managed"
+            else
+              echo "ℹ️ Repository does not exist in AWS, Terraform will create it."
+            fi
+          else
+            echo "✅ prodready-infra-api repository already in Terraform state."
+          fi
+          
+          # Check and import prodready-infra-ui repository  
+          if ! terraform state list | grep -q "module.ecr.aws_ecr_repository.repos\[\"prodready-infra-ui\"\]"; then
+            echo "📦 Checking if prodready-infra-ui repository exists in AWS..."
+            if aws ecr describe-repositories --repository-names prodready-infra-ui --region ${{ env.AWS_REGION }} > /dev/null 2>&1; then
+              echo "✅ Repository exists, importing into Terraform state..."
+              terraform import 'module.ecr.aws_ecr_repository.repos["prodready-infra-ui"]' prodready-infra-ui || echo "⚠️ Import failed or resource already managed"
+            else
+              echo "ℹ️ Repository does not exist in AWS, Terraform will create it."
+            fi
+          else
+            echo "✅ prodready-infra-ui repository already in Terraform state."
+          fi
+        working-directory: terraform
+
       - name: Apply Only New Changes (Incremental)
         run: |
           cd terraform
