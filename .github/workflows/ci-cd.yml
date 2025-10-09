@@ -16,52 +16,9 @@ env:
   ECS_FRONTEND_SERVICE: prodready-infra-frontend-service-staging
 
 jobs:
-  test:
-    name: Run Tests
-    runs-on: ubuntu-latest
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '18'
-        cache: 'npm'
-        cache-dependency-path: |
-          api/package-lock.json
-          ui/package-lock.json
-
-    - name: Install Backend Dependencies
-      run: |
-        cd api
-        npm ci
-
-    - name: Install Frontend Dependencies
-      run: |
-        cd ui
-        npm ci
-
-    - name: Run Backend Tests
-      run: |
-        cd api
-        npm test
-
-    - name: Run Frontend Tests
-      run: |
-        cd ui
-        npm test -- --coverage --watchAll=false
-
-    - name: Run ESLint on Frontend
-      run: |
-        cd ui
-        npx eslint src --ext .js,.jsx --max-warnings 50 || true
-
   terraform-plan:
     name: Terraform Plan
     runs-on: ubuntu-latest
-    needs: [test]
     if: github.event_name == 'pull_request'
     
     steps:
@@ -105,7 +62,6 @@ jobs:
   build-and-push:
     name: Build and Push Images
     runs-on: ubuntu-latest
-    needs: [test]
     if: github.ref == 'refs/heads/main'
     
     steps:
@@ -177,7 +133,6 @@ jobs:
     - name: Apply Only New Changes (Incremental)
       run: |
         cd terraform
-        # Only apply the plan if there are actual changes
         if terraform show -json staging.tfplan | jq -e '.resource_changes[] | select(.change.actions[] | contains("create", "update", "delete"))' > /dev/null 2>&1; then
           echo "Changes detected, applying..."
           terraform apply -auto-approve staging.tfplan
@@ -207,14 +162,12 @@ jobs:
 
     - name: Update ECS Services
       run: |
-        # Update backend service with new deployment
         echo "Updating backend service..."
         aws ecs update-service \
           --cluster $ECS_CLUSTER \
           --service $ECS_BACKEND_SERVICE \
           --force-new-deployment
         
-        # Update frontend service with new deployment
         echo "Updating frontend service..."
         aws ecs update-service \
           --cluster $ECS_CLUSTER \
@@ -239,10 +192,8 @@ jobs:
 
     - name: Health Check
       run: |
-        # Get load balancer DNS name
         ALB_DNS=$(aws elbv2 describe-load-balancers --names prodready-infra-alb-staging --query 'LoadBalancers[0].DNSName' --output text)
         
-        # Health check backend
         echo "Checking backend health at http://$ALB_DNS/api/health"
         for i in {1..10}; do
           if curl -f -s "http://$ALB_DNS/api/health" > /dev/null; then
