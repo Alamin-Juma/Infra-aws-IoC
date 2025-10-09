@@ -164,6 +164,7 @@ module "ecs" {
   memory             = var.ecs_memory
   health_check_path  = var.health_check_path
   cloudwatch_logs    = true
+  database_url       = "postgresql://postgres:${var.db_password}@${module.rds.db_instance_endpoint}/prodready_infra_${var.environment}"
 }
 
 # CloudWatch Monitoring and Alarms (disabled for initial deployment)

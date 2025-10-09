@@ -1,212 +1,321 @@
-# GitHub Actions CI/CD Workflow for ProdReady_Infra Application
-name: Build and Deploy ProdReady_Infra
+name: ProdReady_Infra CI/CD Pipeline
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
   pull_request:
-    branches: [main]
+    branches: [main, develop]
 
 env:
   AWS_REGION: us-east-1
-  ECR_BACKEND_REPOSITORY: prodready-infra-api
-  ECR_FRONTEND_REPOSITORY: prodready-infra-ui
-  ECS_CLUSTER: prodready-infra-ecs-cluster-staging
+  ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com
+  BACKEND_REPOSITORY: prodready-infra-api
+  FRONTEND_REPOSITORY: prodready-infra-ui
+  ECS_CLUSTER: prodready-infra-cluster-staging
   ECS_BACKEND_SERVICE: prodready-infra-backend-service-staging
   ECS_FRONTEND_SERVICE: prodready-infra-frontend-service-staging
-  S3_BUCKET: prodready-infra-assets-staging
 
 jobs:
-  terraform:
-    name: Terraform
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-      
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v1
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-      
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v2
-        with:
-          terraform_version: 1.5.7
-      
-      - name: Terraform Init
-        working-directory: ./terraform
-        run: terraform init -backend-config="environments/staging.backend.conf"
-      
-      - name: Terraform Format Check
-        working-directory: ./terraform
-        run: terraform fmt -check || echo "Formatting issues found but continuing..."
-      
-      - name: Terraform Validate
-        working-directory: ./terraform
-        run: terraform validate
-      
-      - name: Terraform Plan
-        working-directory: ./terraform
-        run: terraform plan -var-file="environments/staging.tfvars" -out=tfplan
-        env:
-          TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
-      
-      - name: Terraform Apply (Infrastructure Only)
-        working-directory: ./terraform
-        run: terraform apply -auto-approve -target=module.vpc -target=module.security_groups tfplan
-        env:
-          TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
-  
-  build-and-deploy-backend:
-    name: Build and Deploy Backend
-    runs-on: ubuntu-latest
-    needs: terraform
-    if: false  # Temporarily disabled until ECR repositories are created
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-      
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v1
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-      
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v1
-      
-      - name: Build, tag, and push backend image to Amazon ECR
-        working-directory: ./api
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          IMAGE_TAG: ${{ github.sha }}
-        run: |
-          docker build -t $ECR_REGISTRY/$ECR_BACKEND_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_BACKEND_REPOSITORY:latest .
-          docker push $ECR_REGISTRY/$ECR_BACKEND_REPOSITORY:$IMAGE_TAG
-          docker push $ECR_REGISTRY/$ECR_BACKEND_REPOSITORY:latest
-      
-      - name: Update ECS service
-        run: |
-          aws ecs update-service --cluster $ECS_CLUSTER --service $ECS_BACKEND_SERVICE --force-new-deployment
-  
-  build-and-deploy-frontend:
-    name: Build and Deploy Frontend
-    runs-on: ubuntu-latest
-    needs: terraform
-    if: false  # Temporarily disabled until S3 bucket and CloudFront are created
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-      
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v1
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-      
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v1
-      
-      - name: Build, tag, and push frontend image to Amazon ECR
-        working-directory: ./ui
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          IMAGE_TAG: ${{ github.sha }}
-        run: |
-          docker build -t $ECR_REGISTRY/$ECR_FRONTEND_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_FRONTEND_REPOSITORY:latest .
-          docker push $ECR_REGISTRY/$ECR_FRONTEND_REPOSITORY:$IMAGE_TAG
-          docker push $ECR_REGISTRY/$ECR_FRONTEND_REPOSITORY:latest
-      
-      - name: Update ECS service
-        run: |
-          aws ecs update-service --cluster $ECS_CLUSTER --service $ECS_FRONTEND_SERVICE --force-new-deployment
-      
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: '18'
-          cache: 'npm'
-          cache-dependency-path: './ui/package-lock.json'
-      
-      - name: Install dependencies and build
-        working-directory: ./ui
-        run: |
-          # Use npm ci if package-lock.json exists, otherwise use npm install
-          if [ -f package-lock.json ]; then
-            npm ci
-          else
-            npm install
-          fi
-          npm run build
-      
-      - name: Deploy to S3
-        working-directory: ./ui/build
-        run: |
-          aws s3 sync . s3://$S3_BUCKET --delete
-      
-      - name: Invalidate CloudFront cache
-        run: |
-          aws cloudfront create-invalidation --distribution-id $(aws cloudfront list-distributions --query "DistributionList.Items[?Aliases.Items[?contains(@,'prodready-infra')]].Id" --output text) --paths "/*"
-  
-  security-scan:
-    name: Security Scan
-    runs-on: ubuntu-latest
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-      
-      - name: Run Trivy vulnerability scanner for repository
-        uses: aquasecurity/trivy-action@master
-        with:
-          scan-type: 'fs'
-          scan-ref: '.'
-          format: 'sarif'
-          output: 'trivy-results.sarif'
-          severity: 'CRITICAL,HIGH'
-      
-      - name: Upload Trivy scan results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v2
-        if: always()
-        with:
-          sarif_file: 'trivy-results.sarif'
-  
   test:
-    name: Test
+    name: Run Tests
     runs-on: ubuntu-latest
     
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-      
-      - name: Set up Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: '20'
-      
-      - name: Install backend dependencies
-        working-directory: ./api
-        run: npm ci
-      
-      - name: Run backend tests
-        working-directory: ./api
-        run: npm test
-      
-      - name: Install frontend dependencies
-        working-directory: ./ui
-        run: npm ci
-      
-      - name: Run frontend tests
-        working-directory: ./ui
-        run: npm test
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: |
+          api/package-lock.json
+          ui/package-lock.json
+
+    - name: Install Backend Dependencies
+      run: |
+        cd api
+        npm ci
+
+    - name: Install Frontend Dependencies
+      run: |
+        cd ui
+        npm ci
+
+    - name: Run Backend Tests
+      run: |
+        cd api
+        npm test
+
+    - name: Run Frontend Tests
+      run: |
+        cd ui
+        npm test -- --coverage --watchAll=false
+
+    - name: Run ESLint on Backend
+      run: |
+        cd api
+        npx eslint . --ext .js --max-warnings 0
+
+    - name: Run ESLint on Frontend
+      run: |
+        cd ui
+        npx eslint src --ext .js,.jsx --max-warnings 0
+
+  security-scan:
+    name: Security Scanning
+    runs-on: ubuntu-latest
+    needs: test
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+
+    - name: Upload Trivy scan results to GitHub Security tab
+      uses: github/codeql-action/upload-sarif@v3
+      if: always()
+      with:
+        sarif_file: 'trivy-results.sarif'
+
+    - name: Audit Backend Dependencies
+      run: |
+        cd api
+        npm audit --audit-level high
+
+    - name: Audit Frontend Dependencies
+      run: |
+        cd ui
+        npm audit --audit-level high
+
+  terraform-plan:
+    name: Terraform Plan
+    runs-on: ubuntu-latest
+    needs: [test, security-scan]
+    if: github.event_name == 'pull_request'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: 1.5.0
+
+    - name: Terraform Format Check
+      run: |
+        cd terraform
+        terraform fmt -check -recursive
+
+    - name: Terraform Init (with S3 backend)
+      run: |
+        cd terraform
+        terraform init -backend-config="environments/staging.backend.conf"
+
+    - name: Terraform Validate
+      run: |
+        cd terraform
+        terraform validate
+
+    - name: Terraform Plan
+      run: |
+        cd terraform
+        terraform plan -var-file="environments/staging.tfvars" -out=staging.tfplan
+      env:
+        TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
+
+  build-and-push:
+    name: Build and Push Images
+    runs-on: ubuntu-latest
+    needs: [test, security-scan]
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v2
+
+    - name: Build and push Backend image
+      run: |
+        cd api
+        docker build -t $ECR_REGISTRY/$BACKEND_REPOSITORY:$GITHUB_SHA .
+        docker push $ECR_REGISTRY/$BACKEND_REPOSITORY:$GITHUB_SHA
+        docker tag $ECR_REGISTRY/$BACKEND_REPOSITORY:$GITHUB_SHA $ECR_REGISTRY/$BACKEND_REPOSITORY:latest
+        docker push $ECR_REGISTRY/$BACKEND_REPOSITORY:latest
+
+    - name: Build and push Frontend image
+      run: |
+        cd ui
+        docker build -t $ECR_REGISTRY/$FRONTEND_REPOSITORY:$GITHUB_SHA .
+        docker push $ECR_REGISTRY/$FRONTEND_REPOSITORY:$GITHUB_SHA
+        docker tag $ECR_REGISTRY/$FRONTEND_REPOSITORY:$GITHUB_SHA $ECR_REGISTRY/$FRONTEND_REPOSITORY:latest
+        docker push $ECR_REGISTRY/$FRONTEND_REPOSITORY:latest
+
+  terraform-apply:
+    name: Terraform Apply (Sync with State)
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: github.ref == 'refs/heads/main'
+    environment: staging
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: 1.5.0
+
+    - name: Terraform Init (with S3 backend)
+      run: |
+        cd terraform
+        terraform init -backend-config="environments/staging.backend.conf"
+
+    - name: Terraform Plan
+      run: |
+        cd terraform
+        terraform plan -var-file="environments/staging.tfvars" -out=staging.tfplan
+      env:
+        TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
+
+    - name: Apply Only New Changes (Incremental)
+      run: |
+        cd terraform
+        # Only apply the plan if there are actual changes
+        if terraform show -json staging.tfplan | jq -e '.resource_changes[] | select(.change.actions[] | contains("create", "update", "delete"))' > /dev/null 2>&1; then
+          echo "Changes detected, applying..."
+          terraform apply -auto-approve staging.tfplan
+        else
+          echo "No changes detected in infrastructure"
+        fi
+      env:
+        TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
+
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: terraform-apply
+    if: github.ref == 'refs/heads/main'
+    environment: staging
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Update ECS Services
+      run: |
+        # Update backend service with new deployment
+        echo "Updating backend service..."
+        aws ecs update-service \
+          --cluster $ECS_CLUSTER \
+          --service $ECS_BACKEND_SERVICE \
+          --force-new-deployment
+        
+        # Update frontend service with new deployment
+        echo "Updating frontend service..."
+        aws ecs update-service \
+          --cluster $ECS_CLUSTER \
+          --service $ECS_FRONTEND_SERVICE \
+          --force-new-deployment
+
+    - name: Wait for Deployment to Complete
+      run: |
+        echo "Waiting for backend service to stabilize..."
+        aws ecs wait services-stable \
+          --cluster $ECS_CLUSTER \
+          --services $ECS_BACKEND_SERVICE \
+          --max-attempts 30 \
+          --delay 30
+        
+        echo "Waiting for frontend service to stabilize..."
+        aws ecs wait services-stable \
+          --cluster $ECS_CLUSTER \
+          --services $ECS_FRONTEND_SERVICE \
+          --max-attempts 30 \
+          --delay 30
+
+    - name: Health Check
+      run: |
+        # Get load balancer DNS name
+        ALB_DNS=$(aws elbv2 describe-load-balancers --names prodready-infra-alb-staging --query 'LoadBalancers[0].DNSName' --output text)
+        
+        # Health check backend
+        echo "Checking backend health at http://$ALB_DNS/api/health"
+        for i in {1..10}; do
+          if curl -f -s "http://$ALB_DNS/api/health" > /dev/null; then
+            echo "✅ Backend health check passed"
+            break
+          elif [ $i -eq 10 ]; then
+            echo "❌ Backend health check failed after 10 attempts"
+            exit 1
+          else
+            echo "⏳ Backend not ready, attempt $i/10..."
+            sleep 30
+          fi
+        done
+        
+        echo "🎉 Staging deployment successful!"
+
+  notify:
+    name: Notify Teams
+    runs-on: ubuntu-latest
+    needs: [deploy-staging]
+    if: always()
+    
+    steps:
+    - name: Notify on Success
+      if: needs.deploy-staging.result == 'success'
+      run: |
+        echo "🎉 Staging deployment successful!"
+        # Add Slack/Teams notification here
+
+    - name: Notify on Failure
+      if: failure()
+      run: |
+        echo "❌ Pipeline failed!"
+        # Add Slack/Teams notification here

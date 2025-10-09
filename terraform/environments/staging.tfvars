@@ -15,7 +15,7 @@ private_subnets = ["10.1.10.0/24", "10.1.11.0/24"]
 
 # Application Configuration
 app_port = 8080
-health_check_path = "/health"
+health_check_path = "/api/health"
 
 # Security Configuration (Restricted for staging)
 allowed_ips = ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]  # Private networks only

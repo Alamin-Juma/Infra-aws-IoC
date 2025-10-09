@@ -73,6 +73,12 @@ variable "cloudwatch_logs" {
   default     = true
 }
 
+variable "database_url" {
+  description = "Database connection URL"
+  type        = string
+  sensitive   = true
+}
+
 # ECS Cluster
 resource "aws_ecs_cluster" "main" {
   name = "${var.project_name}-cluster-${var.environment}"
@@ -360,6 +366,10 @@ resource "aws_ecs_task_definition" "backend" {
         {
           name  = "DYNAMODB_TABLE_NAME"
           value = "${var.project_name}-items-${var.environment}"
+        },
+        {
+          name  = "DATABASE_URL"
+          value = var.database_url
         }
       ]
       
