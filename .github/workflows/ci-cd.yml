@@ -10,8 +10,8 @@ env:
   AWS_REGION: us-east-1
   AWS_ACCOUNT_ID: 875486186130
   ECR_REGISTRY: 875486186130.dkr.ecr.us-east-1.amazonaws.com
-  BACKEND_REPOSITORY: prodready-infra-backend
-  FRONTEND_REPOSITORY: prodready-infra-frontend
+  BACKEND_REPOSITORY: prodready-infra-api        # Changed from prodready-infra-backend
+  FRONTEND_REPOSITORY: prodready-infra-ui        # Changed from prodready-infra-frontend
   ECS_CLUSTER: prodready-infra-cluster-staging
   ECS_BACKEND_SERVICE: prodready-infra-backend-service-staging
   ECS_FRONTEND_SERVICE: prodready-infra-frontend-service-staging
@@ -97,21 +97,21 @@ jobs:
         run: |
           cd terraform
           
-          # Check and import backend repository
-          if ! terraform state list | grep -q "module.ecr.aws_ecr_repository.repos\[\"prodready-infra-backend\"\]"; then
-            echo "📦 Checking if prodready-infra-backend repository exists..."
-            if aws ecr describe-repositories --repository-names prodready-infra-backend --region ${{ env.AWS_REGION }} > /dev/null 2>&1; then
+          # Check and import api repository (not backend)
+          if ! terraform state list | grep -q "module.ecr.aws_ecr_repository.repos\[\"prodready-infra-api\"\]"; then
+            echo "📦 Checking if prodready-infra-api repository exists..."
+            if aws ecr describe-repositories --repository-names prodready-infra-api --region ${{ env.AWS_REGION }} > /dev/null 2>&1; then
               echo "✅ Repository exists, importing..."
-              terraform import 'module.ecr.aws_ecr_repository.repos["prodready-infra-backend"]' prodready-infra-backend || echo "⚠️ Import failed or already managed"
+              terraform import 'module.ecr.aws_ecr_repository.repos["prodready-infra-api"]' prodready-infra-api || echo "⚠️ Import failed or already managed"
             fi
           fi
           
-          # Check and import frontend repository
-          if ! terraform state list | grep -q "module.ecr.aws_ecr_repository.repos\[\"prodready-infra-frontend\"\]"; then
-            echo "📦 Checking if prodready-infra-frontend repository exists..."
-            if aws ecr describe-repositories --repository-names prodready-infra-frontend --region ${{ env.AWS_REGION }} > /dev/null 2>&1; then
+          # Check and import ui repository (not frontend)
+          if ! terraform state list | grep -q "module.ecr.aws_ecr_repository.repos\[\"prodready-infra-ui\"\]"; then
+            echo "📦 Checking if prodready-infra-ui repository exists..."
+            if aws ecr describe-repositories --repository-names prodready-infra-ui --region ${{ env.AWS_REGION }} > /dev/null 2>&1; then
               echo "✅ Repository exists, importing..."
-              terraform import 'module.ecr.aws_ecr_repository.repos["prodready-infra-frontend"]' prodready-infra-frontend || echo "⚠️ Import failed or already managed"
+              terraform import 'module.ecr.aws_ecr_repository.repos["prodready-infra-ui"]' prodready-infra-ui || echo "⚠️ Import failed or already managed"
             fi
           fi
 

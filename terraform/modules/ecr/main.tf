@@ -8,6 +8,15 @@ variable "environment" {
   type        = string
 }
 
+variable "repository_names" {
+  description = "ECR repository names"
+  type        = set(string)
+  default     = [
+    "prodready-infra-api",        # Make sure these match
+    "prodready-infra-ui"          # your actual repository names
+  ]
+}
+
 # Data source for AWS account ID
 data "aws_caller_identity" "current" {}
 
