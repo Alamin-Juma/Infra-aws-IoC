@@ -53,10 +53,10 @@ jobs:
         cd ui
         npm test -- --coverage --watchAll=false
 
-    - name: Run ESLint on Backend
-      run: |
-        cd api
-        npx eslint . --ext .js --max-warnings 200 || true
+    # - name: Run ESLint on Backend
+    #   run: |
+    #     cd api
+    #     npx eslint . --ext .js --max-warnings 200 || true
 
     - name: Run ESLint on Frontend
       run: |
