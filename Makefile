@@ -4,8 +4,8 @@
 AWS_REGION ?= us-east-1
 ENVIRONMENT ?= staging
 TF_DIR = terraform
-BACKEND_DIR = backend
-FRONTEND_DIR = frontend
+BACKEND_DIR = api
+FRONTEND_DIR = ui
 PROJECT_NAME = prodready-infra
 
 # AWS Account ID (dynamically fetched)
@@ -79,12 +79,12 @@ validate:
 test: test-backend test-frontend
 
 test-backend:
-	cd $(BACKEND_DIR) && npm test
-	cd $(BACKEND_DIR) && npm audit --audit-level high
+    cd $(BACKEND_DIR) && npm test
+    cd $(BACKEND_DIR) && npm audit --audit-level high
 
 test-frontend:
-	cd $(FRONTEND_DIR) && npm test -- --coverage --watchAll=false
-	cd $(FRONTEND_DIR) && npm audit --audit-level high
+    cd $(FRONTEND_DIR) && npm test -- --coverage --watchAll=false
+    cd $(FRONTEND_DIR) && npm audit --audit-level high
 
 # Security scanning
 .PHONY: security-scan
