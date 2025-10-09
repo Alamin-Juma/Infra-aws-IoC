@@ -6,7 +6,7 @@ on:
   pull_request:
     branches: [main, develop]
 
-# Set environment variables
+# Set environment variable
 env:
   AWS_REGION: us-east-1
   ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com
