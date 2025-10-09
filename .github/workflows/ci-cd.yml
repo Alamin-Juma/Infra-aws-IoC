@@ -6,23 +6,23 @@ on:
   pull_request:
     branches: [main, develop]
 
-# Set environment variable
 env:
   AWS_REGION: us-east-1
   AWS_ACCOUNT_ID: 875486186130
   ECR_REGISTRY: 875486186130.dkr.ecr.us-east-1.amazonaws.com
-  BACKEND_REPOSITORY: prodready-infra-backend  # Changed from prodready-infra-api
-  FRONTEND_REPOSITORY: prodready-infra-frontend  # Changed from prodready-infra-ui
+  BACKEND_REPOSITORY: prodready-infra-backend
+  FRONTEND_REPOSITORY: prodready-infra-frontend
   ECS_CLUSTER: prodready-infra-cluster-staging
   ECS_BACKEND_SERVICE: prodready-infra-backend-service-staging
   ECS_FRONTEND_SERVICE: prodready-infra-frontend-service-staging
 
 jobs:
-  # terraform-plan (for PRs)
+  # Terraform plan for PRs
   terraform-plan:
     name: Terraform Plan
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
+    
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -44,7 +44,7 @@ jobs:
           cd terraform
           terraform fmt -check -recursive
 
-      - name: Terraform Init (with S3 backend)
+      - name: Terraform Init
         run: |
           cd terraform
           terraform init -backend-config="environments/staging.backend.conf"
@@ -57,15 +57,17 @@ jobs:
       - name: Terraform Plan
         run: |
           cd terraform
-          terraform plan -var-file="environments/staging.tfvars" -out=staging.tfplan
+          terraform plan -var-file="environments/staging.tfvars"
         env:
           TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
 
-  # build and push - only on main branch
-  build-and-push:
-    name: Build and Push Images
+  # Build and push images (only on main branch)
+  build-and-deploy:
+    name: Build and Deploy
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
+    environment: staging
+    
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -78,44 +80,66 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Login to Amazon ECR
-        id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build and push images
-        run: |
-          make build-all
-          make push-all
-        env:
-          AWS_REGION: ${{ env.AWS_REGION }}
-          ENVIRONMENT: staging
-
-  terraform-apply:
-    name: Terraform Apply (Sync with State)
-    runs-on: ubuntu-latest
-    needs: build-and-push
-    if: github.ref == 'refs/heads/main'
-    environment: staging
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Setup Terraform
+      # Import ECR repositories if they exist
+      - name: Setup Terraform for Import
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.5.0
 
-      - name: Terraform Init (with S3 backend)
+      - name: Terraform Init for Import
         run: |
           cd terraform
           terraform init -backend-config="environments/staging.backend.conf"
 
+      - name: Import existing ECR repositories
+        run: |
+          cd terraform
+          
+          # Check and import backend repository
+          if ! terraform state list | grep -q "module.ecr.aws_ecr_repository.repos\[\"prodready-infra-backend\"\]"; then
+            echo "📦 Checking if prodready-infra-backend repository exists..."
+            if aws ecr describe-repositories --repository-names prodready-infra-backend --region ${{ env.AWS_REGION }} > /dev/null 2>&1; then
+              echo "✅ Repository exists, importing..."
+              terraform import 'module.ecr.aws_ecr_repository.repos["prodready-infra-backend"]' prodready-infra-backend || echo "⚠️ Import failed or already managed"
+            fi
+          fi
+          
+          # Check and import frontend repository
+          if ! terraform state list | grep -q "module.ecr.aws_ecr_repository.repos\[\"prodready-infra-frontend\"\]"; then
+            echo "📦 Checking if prodready-infra-frontend repository exists..."
+            if aws ecr describe-repositories --repository-names prodready-infra-frontend --region ${{ env.AWS_REGION }} > /dev/null 2>&1; then
+              echo "✅ Repository exists, importing..."
+              terraform import 'module.ecr.aws_ecr_repository.repos["prodready-infra-frontend"]' prodready-infra-frontend || echo "⚠️ Import failed or already managed"
+            fi
+          fi
+
+      # Build and push backend image
+      - name: Build and push Backend image
+        run: |
+          cd api
+          echo "Building backend image..."
+          docker build -t $ECR_REGISTRY/$BACKEND_REPOSITORY:$GITHUB_SHA .
+          docker build -t $ECR_REGISTRY/$BACKEND_REPOSITORY:latest .
+          
+          echo "Pushing backend image..."
+          docker push $ECR_REGISTRY/$BACKEND_REPOSITORY:$GITHUB_SHA
+          docker push $ECR_REGISTRY/$BACKEND_REPOSITORY:latest
+
+      # Build and push frontend image
+      - name: Build and push Frontend image
+        run: |
+          cd ui
+          echo "Building frontend image..."
+          docker build -t $ECR_REGISTRY/$FRONTEND_REPOSITORY:$GITHUB_SHA .
+          docker build -t $ECR_REGISTRY/$FRONTEND_REPOSITORY:latest .
+          
+          echo "Pushing frontend image..."
+          docker push $ECR_REGISTRY/$FRONTEND_REPOSITORY:$GITHUB_SHA
+          docker push $ECR_REGISTRY/$FRONTEND_REPOSITORY:latest
+
+      # Deploy infrastructure
       - name: Terraform Plan
         run: |
           cd terraform
@@ -123,79 +147,56 @@ jobs:
         env:
           TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
 
-      - name: Import existing ECR repositories
+      - name: Terraform Apply
         run: |
           cd terraform
-          
-          # Check and import prodready-infra-api repository
-          if ! terraform state list | grep -q "module.ecr.aws_ecr_repository.repos\[\"prodready-infra-api\"\]"; then
-            echo "📦 Checking if prodready-infra-api repository exists in AWS..."
-            if aws ecr describe-repositories --repository-names prodready-infra-api --region ${{ env.AWS_REGION }} > /dev/null 2>&1; then
-              echo "✅ Repository exists, importing into Terraform state..."
-              terraform import 'module.ecr.aws_ecr_repository.repos["prodready-infra-api"]' prodready-infra-api || echo "⚠️ Import failed or resource already managed"
-            else
-              echo "ℹ️ Repository does not exist in AWS, Terraform will create it."
-            fi
-          else
-            echo "✅ prodready-infra-api repository already in Terraform state."
-          fi
-          
-          # Check and import prodready-infra-ui repository  
-          if ! terraform state list | grep -q "module.ecr.aws_ecr_repository.repos\[\"prodready-infra-ui\"\]"; then
-            echo "📦 Checking if prodready-infra-ui repository exists in AWS..."
-            if aws ecr describe-repositories --repository-names prodready-infra-ui --region ${{ env.AWS_REGION }} > /dev/null 2>&1; then
-              echo "✅ Repository exists, importing into Terraform state..."
-              terraform import 'module.ecr.aws_ecr_repository.repos["prodready-infra-ui"]' prodready-infra-ui || echo "⚠️ Import failed or resource already managed"
-            else
-              echo "ℹ️ Repository does not exist in AWS, Terraform will create it."
-            fi
-          else
-            echo "✅ prodready-infra-ui repository already in Terraform state."
-          fi
-        working-directory: terraform
-
-      - name: Apply Only New Changes (Incremental)
-        run: |
-          cd terraform
-          if terraform show -json staging.tfplan | jq -e '.resource_changes[] | select(.change.actions[] | contains("create", "update", "delete"))' > /dev/null 2>&1; then
-            echo "Changes detected, applying..."
-            terraform apply -auto-approve staging.tfplan
-          else
-            echo "No changes detected in infrastructure"
-          fi
+          terraform apply -auto-approve staging.tfplan
         env:
           TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
 
-  deploy-staging:
-    name: Deploy to Staging
-    runs-on: ubuntu-latest
-    needs: terraform-apply
-    if: github.ref == 'refs/heads/main'
-    environment: staging
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-
+      # Update ECS services
       - name: Update ECS Services
         run: |
-          aws ecs update-service --cluster $ECS_CLUSTER --service $ECS_BACKEND_SERVICE --force-new-deployment
-          aws ecs update-service --cluster $ECS_CLUSTER --service $ECS_FRONTEND_SERVICE --force-new-deployment
+          echo "Updating ECS services..."
+          aws ecs update-service \
+            --cluster $ECS_CLUSTER \
+            --service $ECS_BACKEND_SERVICE \
+            --force-new-deployment \
+            --region ${{ env.AWS_REGION }}
+          
+          aws ecs update-service \
+            --cluster $ECS_CLUSTER \
+            --service $ECS_FRONTEND_SERVICE \
+            --force-new-deployment \
+            --region ${{ env.AWS_REGION }}
 
-      - name: Wait for Deployment to Complete
+      # Wait for deployment
+      - name: Wait for Deployment
         run: |
-          aws ecs wait services-stable --cluster $ECS_CLUSTER --services $ECS_BACKEND_SERVICE --max-attempts 30 --delay 30
-          aws ecs wait services-stable --cluster $ECS_CLUSTER --services $ECS_FRONTEND_SERVICE --max-attempts 30 --delay 30
+          echo "Waiting for backend service to stabilize..."
+          aws ecs wait services-stable \
+            --cluster $ECS_CLUSTER \
+            --services $ECS_BACKEND_SERVICE \
+            --region ${{ env.AWS_REGION }} \
+            --max-attempts 30
 
+          echo "Waiting for frontend service to stabilize..."
+          aws ecs wait services-stable \
+            --cluster $ECS_CLUSTER \
+            --services $ECS_FRONTEND_SERVICE \
+            --region ${{ env.AWS_REGION }} \
+            --max-attempts 30
+
+      # Health check
       - name: Health Check
         run: |
-          ALB_DNS=$(aws elbv2 describe-load-balancers --names prodready-infra-alb-staging --query 'LoadBalancers[0].DNSName' --output text)
+          echo "Running health checks..."
+          ALB_DNS=$(aws elbv2 describe-load-balancers \
+            --names prodready-infra-alb-staging \
+            --query 'LoadBalancers[0].DNSName' \
+            --output text \
+            --region ${{ env.AWS_REGION }})
+          
           echo "Checking backend health at http://$ALB_DNS/api/health"
           for i in {1..10}; do
             if curl -f -s "http://$ALB_DNS/api/health" > /dev/null; then
@@ -210,19 +211,18 @@ jobs:
             fi
           done
 
+  # Notification
   notify:
-    name: Notify Teams
+    name: Notify
     runs-on: ubuntu-latest
-    needs: [deploy-staging]
+    needs: [build-and-deploy]
     if: always()
+    
     steps:
-      - name: Notify on Success
-        if: needs.deploy-staging.result == 'success'
-        run: |
-          echo "🎉 Staging deployment successful!"
-          # Add Slack/Teams notification here
-      - name: Notify on Failure
-        if: failure()
-        run: |
-          echo "❌ Pipeline failed!"
-          # Add Slack/Teams notification here
+      - name: Notify Success
+        if: needs.build-and-deploy.result == 'success'
+        run: echo "🎉 Deployment successful!"
+
+      - name: Notify Failure
+        if: needs.build-and-deploy.result == 'failure'
+        run: echo "❌ Deployment failed!"
