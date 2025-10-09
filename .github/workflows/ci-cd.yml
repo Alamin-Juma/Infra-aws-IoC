@@ -9,9 +9,10 @@ on:
 # Set environment variable
 env:
   AWS_REGION: us-east-1
-  ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com
-  BACKEND_REPOSITORY: prodready-infra-api
-  FRONTEND_REPOSITORY: prodready-infra-ui
+  AWS_ACCOUNT_ID: 875486186130
+  ECR_REGISTRY: 875486186130.dkr.ecr.us-east-1.amazonaws.com
+  BACKEND_REPOSITORY: prodready-infra-backend  # Changed from prodready-infra-api
+  FRONTEND_REPOSITORY: prodready-infra-frontend  # Changed from prodready-infra-ui
   ECS_CLUSTER: prodready-infra-cluster-staging
   ECS_BACKEND_SERVICE: prodready-infra-backend-service-staging
   ECS_FRONTEND_SERVICE: prodready-infra-frontend-service-staging
@@ -80,21 +81,13 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build and push Backend image
+      - name: Build and push images
         run: |
-          cd api
-          docker build -t $ECR_REGISTRY/$BACKEND_REPOSITORY:$GITHUB_SHA .
-          docker push $ECR_REGISTRY/$BACKEND_REPOSITORY:$GITHUB_SHA
-          docker tag $ECR_REGISTRY/$BACKEND_REPOSITORY:$GITHUB_SHA $ECR_REGISTRY/$BACKEND_REPOSITORY:latest
-          docker push $ECR_REGISTRY/$BACKEND_REPOSITORY:latest
-
-      - name: Build and push Frontend image
-        run: |
-          cd ui
-          docker build -t $ECR_REGISTRY/$FRONTEND_REPOSITORY:$GITHUB_SHA .
-          docker push $ECR_REGISTRY/$FRONTEND_REPOSITORY:$GITHUB_SHA
-          docker tag $ECR_REGISTRY/$FRONTEND_REPOSITORY:$GITHUB_SHA $ECR_REGISTRY/$FRONTEND_REPOSITORY:latest
-          docker push $ECR_REGISTRY/$FRONTEND_REPOSITORY:latest
+          make build-all
+          make push-all
+        env:
+          AWS_REGION: ${{ env.AWS_REGION }}
+          ENVIRONMENT: staging
 
   terraform-apply:
     name: Terraform Apply (Sync with State)

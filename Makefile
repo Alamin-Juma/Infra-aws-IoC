@@ -223,8 +223,8 @@ deploy: import-ecr deploy-infra deploy-apps
 import-ecr:
     @echo "Importing existing ECR repositories..."
     cd $(TF_DIR) && \
-    terraform import 'module.ecr.aws_ecr_repository.repos["$(PROJECT_NAME)-api"]' $(PROJECT_NAME)-api || true && \
-    terraform import 'module.ecr.aws_ecr_repository.repos["$(PROJECT_NAME)-ui"]' $(PROJECT_NAME)-ui || true
+    terraform import 'module.ecr.aws_ecr_repository.repos["$(PROJECT_NAME)-backend"]' $(PROJECT_NAME)-backend || true && \
+    terraform import 'module.ecr.aws_ecr_repository.repos["$(PROJECT_NAME)-frontend"]' $(PROJECT_NAME)-frontend || true
     @echo "ECR repositories imported successfully."
 
 # Clean up temporary files
