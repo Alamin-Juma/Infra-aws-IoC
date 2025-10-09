@@ -8,7 +8,7 @@ on:
 
 env:
   AWS_REGION: us-east-1
-  ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com
+  # AWS account ID will be used after ECR login
   BACKEND_REPOSITORY: prodready-infra-api
   FRONTEND_REPOSITORY: prodready-infra-ui
   ECS_CLUSTER: prodready-infra-cluster-staging
@@ -80,6 +80,8 @@ jobs:
         uses: aws-actions/amazon-ecr-login@v2
 
       - name: Build and push Backend image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         run: |
           cd api
           docker build -t $ECR_REGISTRY/$BACKEND_REPOSITORY:$GITHUB_SHA .
@@ -88,6 +90,8 @@ jobs:
           docker push $ECR_REGISTRY/$BACKEND_REPOSITORY:latest
 
       - name: Build and push Frontend image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         run: |
           cd ui
           docker build -t $ECR_REGISTRY/$FRONTEND_REPOSITORY:$GITHUB_SHA .
@@ -170,9 +174,13 @@ jobs:
 
       - name: Health Check
         run: |
+          # Get the ALB DNS name using AWS CLI
+          echo "Getting ALB DNS name..."
           ALB_DNS=$(aws elbv2 describe-load-balancers --names prodready-infra-alb-staging --query 'LoadBalancers[0].DNSName' --output text)
+          
           echo "Checking backend health at http://$ALB_DNS/api/health"
-          for i in {1..10}; do
+          # Use bash sequence expansion for the loop
+          for i in $(seq 1 10); do
             if curl -f -s "http://$ALB_DNS/api/health" > /dev/null; then
               echo "✅ Backend health check passed"
               break
