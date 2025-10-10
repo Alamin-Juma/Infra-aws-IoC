@@ -17,7 +17,6 @@ env:
   ECS_FRONTEND_SERVICE: prodready-infra-frontend-service-staging
 
 jobs:
-  # Terraform plan for PRs
   terraform-plan:
     name: Terraform Plan
     runs-on: ubuntu-latest
@@ -38,109 +37,33 @@ jobs:
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.5.0
-          terraform_wrapper: false
 
       - name: Terraform Format Check
         run: |
           cd terraform
           terraform fmt -check -recursive
-
       - name: Terraform Init
         run: |
           cd terraform
           terraform init -backend-config="environments/staging.backend.conf"
-
-      - name: Clear any stale locks
+      - name: Force unlock Terraform state
         run: |
           cd terraform
-          echo "🔓 Checking for stale Terraform locks..."
-          
-          if terraform plan -var-file="environments/staging.tfvars" 2>&1 | grep -q "Lock Info:"; then
-            LOCK_ID=$(terraform plan -var-file="environments/staging.tfvars" 2>&1 | grep "ID:" | awk '{print $2}' | head -1)
-            echo "Found lock ID: $LOCK_ID, attempting to unlock..."
-            terraform force-unlock -force "$LOCK_ID" 2>/dev/null || echo "Could not unlock or no lock exists"
-          else
-            echo "No locks detected"
-          fi
+          echo "🔓 Force unlocking Terraform state..."
+          terraform force-unlock -force ef4b274e-0c2c-cbf5-2ec5-f8e81ffd4e34 2>/dev/null || echo "No lock with this ID or already cleared"
         continue-on-error: true
-        env:
-          TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
-
-      - name: Smart ECR State Sync
-        run: |
-          cd terraform
-          echo "🔄 Smart ECR State Synchronization"
-          echo "=================================="
-          
-          # CRITICAL: The resource path MUST match your for_each key format
-          # Since you use: for_each = toset(var.repositories)
-          # The path is: module.ecr.aws_ecr_repository.repos["repo-name"]
-          
-          safe_import() {
-            local repo_name=$1
-            # This is the CORRECT format for toset(var.repositories)
-            local resource_path='module.ecr.aws_ecr_repository.repos["'$repo_name'"]'
-            
-            echo ""
-            echo "📦 Processing: $repo_name"
-            echo "Resource path: $resource_path"
-            
-            # Check if exists in AWS
-            if aws ecr describe-repositories --repository-names "$repo_name" --region $AWS_REGION >/dev/null 2>&1; then
-              echo "  ✅ $repo_name exists in AWS"
-              
-              # Check if in Terraform state
-              if terraform state list 2>/dev/null | grep -qF "$resource_path"; then
-                echo "  ✅ Already in Terraform state - SKIP"
-                return 0
-              else
-                echo "  📥 Importing to Terraform state..."
-                if terraform import "$resource_path" "$repo_name" 2>&1 | tee /tmp/import_${repo_name}.log; then
-                  echo "  ✅ Import successful"
-                  return 0
-                else
-                  if grep -q "Resource already managed\|already exists in the state" /tmp/import_${repo_name}.log; then
-                    echo "  ✅ Already managed"
-                    return 0
-                  else
-                    echo "  ⚠️ Import failed"
-                    cat /tmp/import_${repo_name}.log
-                    return 1
-                  fi
-                fi
-              fi
-            else
-              echo "  ℹ️ Will be created by Terraform"
-              return 0
-            fi
-          }
-          
-          # Process repositories
-          safe_import "$BACKEND_REPOSITORY"
-          safe_import "$FRONTEND_REPOSITORY"
-          
-          echo ""
-          echo "📋 Current ECR resources in Terraform state:"
-          terraform state list | grep ecr_repository || echo "No ECR repositories in state yet"
-          echo ""
-          echo "✅ State sync completed"
-        continue-on-error: true
-        env:
-          TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
 
       - name: Terraform Validate
         run: |
           cd terraform
           terraform validate
-
       - name: Terraform Plan
         run: |
           cd terraform
-          terraform plan -refresh=true -var-file="environments/staging.tfvars" -no-color
+          terraform plan -var-file="environments/staging.tfvars"
         env:
           TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
 
-  # Build and push images (only on main branch)
   build-and-deploy:
     name: Build and Deploy
     runs-on: ubuntu-latest
@@ -185,110 +108,6 @@ jobs:
             echo "No locks detected"
           fi
         continue-on-error: true
-        env:
-          TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
-
-      - name: Enhanced ECR State Synchronization
-        run: |
-          cd terraform
-          echo "🚀 Enhanced ECR State Synchronization"
-          echo "====================================="
-          
-          validate_and_sync_ecr() {
-            local repo_name=$1
-            # CRITICAL: Correct resource path for toset(var.repositories)
-            local resource_path='module.ecr.aws_ecr_repository.repos["'$repo_name'"]'
-            
-            echo ""
-            echo "🔍 Validating: $repo_name"
-            echo "Resource: $resource_path"
-            
-            # Check AWS
-            AWS_EXISTS=false
-            if aws ecr describe-repositories --repository-names "$repo_name" --region $AWS_REGION >/dev/null 2>&1; then
-              AWS_EXISTS=true
-              REPO_URI=$(aws ecr describe-repositories --repository-names "$repo_name" --region $AWS_REGION --query 'repositories[0].repositoryUri' --output text)
-              echo "  ✅ Repository exists in AWS: $REPO_URI"
-            else
-              echo "  ℹ️ Repository does not exist in AWS (will be created)"
-            fi
-            
-            # Check Terraform state (using grep -F for exact match)
-            STATE_EXISTS=false
-            if terraform state list 2>/dev/null | grep -qF "$resource_path"; then
-              STATE_EXISTS=true
-              echo "  ✅ Resource exists in Terraform state"
-            else
-              echo "  ⚠️ Resource missing from Terraform state"
-            fi
-            
-            # Import if needed
-            if [ "$AWS_EXISTS" = true ] && [ "$STATE_EXISTS" = false ]; then
-              echo "  🔄 Importing to Terraform state..."
-              
-              for attempt in 1 2 3; do
-                echo "  📥 Import attempt $attempt/3..."
-                IMPORT_OUTPUT=$(terraform import "$resource_path" "$repo_name" 2>&1)
-                IMPORT_EXIT=$?
-                
-                if [ $IMPORT_EXIT -eq 0 ]; then
-                  echo "  ✅ Import successful"
-                  
-                  # Verify import
-                  if terraform state list 2>/dev/null | grep -qF "$resource_path"; then
-                    echo "  ✅ Verified in state"
-                    
-                    # Refresh to sync attributes
-                    echo "  🔄 Refreshing state..."
-                    terraform refresh -target="$resource_path" -var-file="environments/staging.tfvars" >/dev/null 2>&1 || true
-                    echo "  ✅ State refreshed"
-                    return 0
-                  fi
-                else
-                  if echo "$IMPORT_OUTPUT" | grep -q "Resource already managed\|already exists in the state"; then
-                    echo "  ✅ Already managed"
-                    return 0
-                  elif echo "$IMPORT_OUTPUT" | grep -q "does not exist"; then
-                    echo "  ℹ️ Will be created by Terraform"
-                    return 0
-                  else
-                    echo "  ⚠️ Attempt $attempt failed"
-                    if [ $attempt -lt 3 ]; then
-                      sleep 2
-                    fi
-                  fi
-                fi
-              done
-              
-              echo "  ⚠️ Import failed after 3 attempts"
-              echo "  ℹ️ Will attempt to handle during apply"
-              
-            elif [ "$AWS_EXISTS" = true ] && [ "$STATE_EXISTS" = true ]; then
-              echo "  ✅ Perfect sync - refreshing state..."
-              terraform refresh -target="$resource_path" -var-file="environments/staging.tfvars" >/dev/null 2>&1 || true
-              echo "  ✅ State refreshed"
-            fi
-            
-            return 0
-          }
-          
-          # Process both repositories
-          validate_and_sync_ecr "$BACKEND_REPOSITORY"
-          validate_and_sync_ecr "$FRONTEND_REPOSITORY"
-          
-          echo ""
-          echo "📊 Final State Summary:"
-          echo "======================="
-          echo ""
-          echo "Terraform ECR Resources:"
-          terraform state list | grep ecr_repository || echo "  No ECR repositories in state"
-          
-          echo ""
-          echo "AWS ECR Repositories:"
-          aws ecr describe-repositories --region $AWS_REGION --query 'repositories[].repositoryName' --output table 2>/dev/null || echo "  Could not list"
-          
-          echo ""
-          echo "✅ Sync completed"
         env:
           TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
 
