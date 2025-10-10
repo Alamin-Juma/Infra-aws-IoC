@@ -1,4 +1,3 @@
-```yaml
 name: ProdReady_Infra CI/CD Pipeline
 
 on:
@@ -21,7 +20,7 @@ jobs:
   terraform-plan:
     name: Terraform Plan
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
+    if: ${{ github.event_name == 'pull_request' }}
     
     steps:
       - name: Checkout code
@@ -43,10 +42,12 @@ jobs:
         run: |
           cd terraform
           terraform fmt -check -recursive
+
       - name: Terraform Init
         run: |
           cd terraform
           terraform init -backend-config="environments/staging.backend.conf"
+
       - name: Force unlock Terraform state
         run: |
           cd terraform
@@ -58,6 +59,7 @@ jobs:
         run: |
           cd terraform
           terraform validate
+
       - name: Terraform Plan
         run: |
           cd terraform
@@ -68,7 +70,7 @@ jobs:
   build-and-deploy:
     name: Build and Deploy
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    if: ${{ github.ref == 'refs/heads/main' }}
     environment: staging
     
     steps:
@@ -100,7 +102,6 @@ jobs:
         run: |
           cd terraform
           echo "🔓 Clearing any stale Terraform locks..."
-          
           if terraform plan -var-file="environments/staging.tfvars" 2>&1 | grep -q "Lock Info:"; then
             LOCK_ID=$(terraform plan -var-file="environments/staging.tfvars" 2>&1 | grep "ID:" | awk '{print $2}' | head -1)
             echo "Detected lock ID: $LOCK_ID"
@@ -142,48 +143,29 @@ jobs:
           cd terraform
           echo "🚀 Applying Terraform changes..."
           
-          # Clear any stale locks
           terraform force-unlock -force fb45a5bc-a2cf-323f-e57b-0432c53495cf 2>/dev/null || echo "No lock to clear"
-          
-          # Refresh state to ensure alignment with current infrastructure
-          echo "🔄 Refreshing Terraform state before apply..."
           terraform refresh -var-file="environments/staging.tfvars" >/dev/null 2>&1 || true
           
-          # Run apply directly without a plan file
           echo "Applying changes..."
           terraform apply -auto-approve -var-file="environments/staging.tfvars" 2>&1 | tee /tmp/apply_output.log
           APPLY_EXIT=${PIPESTATUS[0]}
           
           if [ $APPLY_EXIT -ne 0 ]; then
-            # Check for ECR already exists error
             if grep -q "RepositoryAlreadyExistsException" /tmp/apply_output.log; then
-              echo ""
               echo "❌ ECR repository already exists error detected!"
-              echo "🔍 This indicates a mismatch between Terraform state and AWS."
-              echo ""
-              echo "📋 Current Terraform state (ECR resources):"
-              terraform state list | grep ecr || echo "No ECR repositories in state"
-              echo ""
-              echo "☁️ AWS ECR repositories:"
-              aws ecr describe-repositories --region $AWS_REGION --query 'repositories[].repositoryName' --output text
-              echo ""
               echo "🔄 Attempting to import and re-apply..."
               
-              # Import repositories if they exist in AWS but not in state
               for REPO in "$BACKEND_REPOSITORY" "$FRONTEND_REPOSITORY"; do
                 RESOURCE_PATH="module.ecr.aws_ecr_repository.repos[\"$REPO\"]"
                 if aws ecr describe-repositories --repository-names "$REPO" --region $AWS_REGION >/dev/null 2>&1; then
                   if ! terraform state list 2>/dev/null | grep -qF "$RESOURCE_PATH"; then
-                    echo "  📥 Importing $REPO to Terraform state..."
+                    echo "📥 Importing $REPO to Terraform state..."
                     terraform import "$RESOURCE_PATH" "$REPO" || echo "Import failed for $REPO"
                   fi
                 fi
               done
               
-              # Refresh state again
               terraform refresh -var-file="environments/staging.tfvars" >/dev/null 2>&1 || true
-              
-              # Retry apply
               echo "🔄 Retrying apply..."
               terraform apply -auto-approve -var-file="environments/staging.tfvars" 2>&1 | tee /tmp/retry_apply_output.log
               RETRY_EXIT=${PIPESTATUS[0]}
@@ -194,7 +176,6 @@ jobs:
                 exit 1
               fi
             else
-              # Different error, fail immediately
               cat /tmp/apply_output.log
               exit $APPLY_EXIT
             fi
@@ -207,7 +188,6 @@ jobs:
       - name: Update ECS Services
         run: |
           echo "🔄 Updating ECS services..."
-          
           aws ecs update-service \
             --cluster $ECS_CLUSTER \
             --service $ECS_BACKEND_SERVICE \
@@ -219,13 +199,11 @@ jobs:
             --service $ECS_FRONTEND_SERVICE \
             --force-new-deployment \
             --region ${{ env.AWS_REGION }}
-          
           echo "✅ ECS updates initiated"
 
       - name: Wait for Deployment
         run: |
           echo "⏳ Waiting for services to stabilize..."
-          
           aws ecs wait services-stable \
             --cluster $ECS_CLUSTER \
             --services $ECS_BACKEND_SERVICE \
@@ -248,7 +226,6 @@ jobs:
             --region ${{ env.AWS_REGION }})
           
           echo "Load Balancer: $ALB_DNS"
-          
           for i in {1..10}; do
             echo "Health check $i/10..."
             if curl -f -s "http://$ALB_DNS/api/health" > /dev/null; then
@@ -271,7 +248,6 @@ jobs:
           echo "Region: $AWS_REGION"
           echo "Commit: $GITHUB_SHA"
           echo ""
-          
           if [ "${{ steps.apply.outcome }}" == "success" ]; then
             echo "Status: ✅ Successful"
           else
@@ -282,17 +258,15 @@ jobs:
     name: Notify
     runs-on: ubuntu-latest
     needs: [build-and-deploy]
-    if: always()
+    if: ${{ always() }}
     
     steps:
       - name: Notify Success
-        if: needs.build-and-deploy.result == 'success'
-        run: |
-          echo "🎉 Deployment Successful!"
+        if: ${{ needs.build-and-deploy.result == 'success' }}
+        run: echo "🎉 Deployment Successful!"
 
       - name: Notify Failure
-        if: needs.build-and-deploy.result == 'failure'
+        if: ${{ needs.build-and-deploy.result == 'failure' }}
         run: |
           echo "❌ Deployment Failed!"
           exit 1
-```
