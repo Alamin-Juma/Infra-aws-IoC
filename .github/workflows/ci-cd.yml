@@ -207,14 +207,12 @@ jobs:
           aws ecs wait services-stable \
             --cluster $ECS_CLUSTER \
             --services $ECS_BACKEND_SERVICE \
-            --region ${{ env.AWS_REGION }} \
-            --max-attempts 30 && echo "✅ Backend stable"
+            --region ${{ env.AWS_REGION }} && echo "✅ Backend stable"
 
           aws ecs wait services-stable \
             --cluster $ECS_CLUSTER \
             --services $ECS_FRONTEND_SERVICE \
-            --region ${{ env.AWS_REGION }} \
-            --max-attempts 30 && echo "✅ Frontend stable"
+            --region ${{ env.AWS_REGION }} && echo "✅ Frontend stable"
 
       - name: Health Check
         run: |
