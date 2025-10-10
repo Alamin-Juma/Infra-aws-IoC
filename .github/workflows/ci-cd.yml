@@ -297,6 +297,26 @@ jobs:
             exit 1
           fi
 
+      - name: Debug Container Setup
+        run: |
+          echo "🔍 Debugging container configuration..."
+          aws ecs describe-task-definition --task-definition $ECS_BACKEND_SERVICE \
+            --query 'taskDefinition.containerDefinitions[0].portMappings' \
+            --output json --region ${{ env.AWS_REGION }}
+        
+          # Check the environment variables
+          aws ecs describe-task-definition --task-definition $ECS_BACKEND_SERVICE \
+            --query 'taskDefinition.containerDefinitions[0].environment' \
+            --output json --region ${{ env.AWS_REGION }}
+        
+          # Check logs from the failed container
+          aws logs get-log-events \
+            --log-group-name "/aws/ecs/$ECS_CLUSTER/$ECS_BACKEND_SERVICE" \
+            --log-stream-name "$(aws logs describe-log-streams \
+              --log-group-name "/aws/ecs/$ECS_CLUSTER/$ECS_BACKEND_SERVICE" \
+              --query 'logStreams[0].logStreamName' --output text)" \
+            --limit 20 --region ${{ env.AWS_REGION }} || echo "Couldn't get logs"
+
       - name: Deployment Summary
         if: always()
         run: |

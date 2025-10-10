@@ -111,6 +111,14 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 app.use(cors());
+app.get('/api/health', (req, res) => {
+  res.status(200).json({ status: 'healthy', timestamp: new Date().toISOString() });
+});
+
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'healthy', timestamp: new Date().toISOString() });
+});
+
 app.use(authenticateToken);
 app.use(checkPermissions);
 
