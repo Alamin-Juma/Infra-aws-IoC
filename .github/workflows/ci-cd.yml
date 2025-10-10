@@ -49,11 +49,11 @@ jobs:
           cd terraform
           terraform init -backend-config="environments/staging.backend.conf"
 
-      - name: Force unlock Terraform state
+      - name: Clear any stale locks
         run: |
           cd terraform
-          echo "🔓 Force unlocking Terraform state..."
-          terraform force-unlock -force ef4b274e-0c2c-cbf5-2ec5-f8e81ffd4e34 2>/dev/null || echo "No lock with this ID or already cleared"
+          echo "🔓 Checking for stale Terraform locks..."
+          terraform force-unlock -force ef4b274e-0c2c-cbf5-2ec5-f8e81ffd4e34 2>/dev/null || echo "No lock found or already cleared"
         continue-on-error: true
 
       - name: Terraform Validate
@@ -100,6 +100,21 @@ jobs:
           cd terraform
           terraform init -backend-config="environments/staging.backend.conf"
 
+      # Import existing ECR repositories if needed
+      - name: Import existing ECR repositories
+        run: |
+          cd terraform
+          echo "🔍 Checking and importing existing ECR repositories..."
+          
+          # Try to import backend repository
+          terraform import 'module.ecr.aws_ecr_repository.repos["prodready-infra-api"]' prodready-infra-api 2>/dev/null || echo "Backend repo already in state or doesn't exist"
+          
+          # Try to import frontend repository
+          terraform import 'module.ecr.aws_ecr_repository.repos["prodready-infra-ui"]' prodready-infra-ui 2>/dev/null || echo "Frontend repo already in state or doesn't exist"
+        continue-on-error: true
+        env:
+          TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
+
       # Build and push backend image
       - name: Build and push Backend image
         run: |
@@ -124,18 +139,13 @@ jobs:
           docker push $ECR_REGISTRY/$FRONTEND_REPOSITORY:$GITHUB_SHA
           docker push $ECR_REGISTRY/$FRONTEND_REPOSITORY:latest
 
-      # Deploy infrastructure - ADD FORCE UNLOCK HERE
-      - name: Force unlock Terraform state before deployment
+      # Clear any stale locks before deployment
+      - name: Clear stale Terraform locks
         run: |
           cd terraform
-          echo "🔓 Force unlocking Terraform state before deployment..."
-          terraform force-unlock -force ef4b274e-0c2c-cbf5-2ec5-f8e81ffd4e34 2>/dev/null || echo "No lock with this ID or already cleared"
-          
-          # Also try to unlock any other potential locks
-          terraform force-unlock -force $(terraform plan -var-file="environments/staging.tfvars" 2>&1 | grep "ID:" | awk '{print $2}' | head -1) 2>/dev/null || echo "No additional locks found"
+          echo "🔓 Clearing any stale Terraform locks..."
+          terraform force-unlock -force ef4b274e-0c2c-cbf5-2ec5-f8e81ffd4e34 2>/dev/null || echo "No lock found or already cleared"
         continue-on-error: true
-        env:
-          TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
 
       - name: Terraform Plan
         run: |
