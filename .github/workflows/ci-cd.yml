@@ -1,3 +1,4 @@
+```yaml
 name: ProdReady_Infra CI/CD Pipeline
 
 on:
@@ -135,20 +136,6 @@ jobs:
           docker push $ECR_REGISTRY/$FRONTEND_REPOSITORY:latest
           echo "✅ Frontend image pushed"
 
-      - name: Terraform Plan
-        id: plan
-        run: |
-          cd terraform
-          echo "📝 Running Terraform plan..."
-          
-          # Clear locks
-          terraform force-unlock -force fb45a5bc-a2cf-323f-e57b-0432c53495cf 2>/dev/null || true
-          
-          # Plan with refresh to pick up imported state
-          terraform plan -refresh=true -var-file="environments/staging.tfvars" -out=staging.tfplan -no-color
-        env:
-          TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
-
       - name: Terraform Apply
         id: apply
         run: |
@@ -158,100 +145,58 @@ jobs:
           # Clear any stale locks
           terraform force-unlock -force fb45a5bc-a2cf-323f-e57b-0432c53495cf 2>/dev/null || echo "No lock to clear"
           
-          # Refresh state to ensure it includes imported ECR repositories
+          # Refresh state to ensure alignment with current infrastructure
           echo "🔄 Refreshing Terraform state before apply..."
           terraform refresh -var-file="environments/staging.tfvars" >/dev/null 2>&1 || true
           
-          # Check if plan file exists
-          if [ -f staging.tfplan ]; then
-            echo "Applying saved plan..."
-            terraform apply -auto-approve staging.tfplan 2>&1 | tee /tmp/apply_output.log
-            APPLY_EXIT=${PIPESTATUS[0]}
-            
-            if [ $APPLY_EXIT -ne 0 ]; then
-              # Check for ECR already exists error
-              if grep -q "RepositoryAlreadyExistsException" /tmp/apply_output.log; then
-                echo ""
-                echo "❌ ECR repository already exists error detected!"
-                echo "🔍 This indicates a mismatch between Terraform state and AWS."
-                echo ""
-                echo "📋 Current Terraform state (ECR resources):"
-                terraform state list | grep ecr || echo "No ECR repositories in state"
-                echo ""
-                echo "☁️ AWS ECR repositories:"
-                aws ecr describe-repositories --region $AWS_REGION --query 'repositories[].repositoryName' --output text
-                echo ""
-                echo "🔄 Attempting to re-sync state and re-apply..."
-                
-                # Re-run sync for both repositories
-                for REPO in "$BACKEND_REPOSITORY" "$FRONTEND_REPOSITORY"; do
-                  RESOURCE_PATH="module.ecr.aws_ecr_repository.repos[\"$REPO\"]"
-                  if aws ecr describe-repositories --repository-names "$REPO" --region $AWS_REGION >/dev/null 2>&1; then
-                    if ! terraform state list 2>/dev/null | grep -qF "$RESOURCE_PATH"; then
-                      echo "  📥 Importing $REPO to Terraform state..."
-                      terraform import "$RESOURCE_PATH" "$REPO" || echo "Import failed for $REPO"
-                    fi
+          # Run apply directly without a plan file
+          echo "Applying changes..."
+          terraform apply -auto-approve -var-file="environments/staging.tfvars" 2>&1 | tee /tmp/apply_output.log
+          APPLY_EXIT=${PIPESTATUS[0]}
+          
+          if [ $APPLY_EXIT -ne 0 ]; then
+            # Check for ECR already exists error
+            if grep -q "RepositoryAlreadyExistsException" /tmp/apply_output.log; then
+              echo ""
+              echo "❌ ECR repository already exists error detected!"
+              echo "🔍 This indicates a mismatch between Terraform state and AWS."
+              echo ""
+              echo "📋 Current Terraform state (ECR resources):"
+              terraform state list | grep ecr || echo "No ECR repositories in state"
+              echo ""
+              echo "☁️ AWS ECR repositories:"
+              aws ecr describe-repositories --region $AWS_REGION --query 'repositories[].repositoryName' --output text
+              echo ""
+              echo "🔄 Attempting to import and re-apply..."
+              
+              # Import repositories if they exist in AWS but not in state
+              for REPO in "$BACKEND_REPOSITORY" "$FRONTEND_REPOSITORY"; do
+                RESOURCE_PATH="module.ecr.aws_ecr_repository.repos[\"$REPO\"]"
+                if aws ecr describe-repositories --repository-names "$REPO" --region $AWS_REGION >/dev/null 2>&1; then
+                  if ! terraform state list 2>/dev/null | grep -qF "$RESOURCE_PATH"; then
+                    echo "  📥 Importing $REPO to Terraform state..."
+                    terraform import "$RESOURCE_PATH" "$REPO" || echo "Import failed for $REPO"
                   fi
-                done
-                
-                # Refresh state again
-                terraform refresh -var-file="environments/staging.tfvars" >/dev/null 2>&1 || true
-                
-                # Retry apply without the plan file
-                echo "🔄 Retrying apply without plan file..."
-                terraform apply -auto-approve -var-file="environments/staging.tfvars" 2>&1 | tee /tmp/retry_apply_output.log
-                RETRY_EXIT=${PIPESTATUS[0]}
-                
-                if [ $RETRY_EXIT -ne 0 ]; then
-                  echo "❌ Retry failed!"
-                  cat /tmp/retry_apply_output.log
-                  exit 1
                 fi
-              else
-                # Different error, fail immediately
-                cat /tmp/apply_output.log
-                exit $APPLY_EXIT
+              done
+              
+              # Refresh state again
+              terraform refresh -var-file="environments/staging.tfvars" >/dev/null 2>&1 || true
+              
+              # Retry apply
+              echo "🔄 Retrying apply..."
+              terraform apply -auto-approve -var-file="environments/staging.tfvars" 2>&1 | tee /tmp/retry_apply_output.log
+              RETRY_EXIT=${PIPESTATUS[0]}
+              
+              if [ $RETRY_EXIT -ne 0 ]; then
+                echo "❌ Retry failed!"
+                cat /tmp/retry_apply_output.log
+                exit 1
               fi
-            fi
-          else
-            echo "⚠️ Plan file not found, performing direct apply..."
-            terraform apply -auto-approve -var-file="environments/staging.tfvars" 2>&1 | tee /tmp/apply_output.log
-            APPLY_EXIT=${PIPESTATUS[0]}
-            
-            if [ $APPLY_EXIT -ne 0 ]; then
-              if grep -q "RepositoryAlreadyExistsException" /tmp/apply_output.log; then
-                echo ""
-                echo "❌ ECR repository already exists error detected!"
-                echo "🔍 Re-running import and retrying apply..."
-                
-                # Re-run sync for both repositories
-                for REPO in "$BACKEND_REPOSITORY" "$FRONTEND_REPOSITORY"; do
-                  RESOURCE_PATH="module.ecr.aws_ecr_repository.repos[\"$REPO\"]"
-                  if aws ecr describe-repositories --repository-names "$REPO" --region $AWS_REGION >/dev/null 2>&1; then
-                    if ! terraform state list 2>/dev/null | grep -qF "$RESOURCE_PATH"; then
-                      echo "  📥 Importing $REPO to Terraform state..."
-                      terraform import "$RESOURCE_PATH" "$REPO" || echo "Import failed for $REPO"
-                    fi
-                  fi
-                done
-                
-                # Refresh state again
-                terraform refresh -var-file="environments/staging.tfvars" >/dev/null 2>&1 || true
-                
-                # Retry apply
-                echo "🔄 Retrying apply..."
-                terraform apply -auto-approve -var-file="environments/staging.tfvars" 2>&1 | tee /tmp/retry_apply_output.log
-                RETRY_EXIT=${PIPESTATUS[0]}
-                
-                if [ $RETRY_EXIT -ne 0 ]; then
-                  echo "❌ Retry failed!"
-                  cat /tmp/retry_apply_output.log
-                  exit 1
-                fi
-              else
-                cat /tmp/apply_output.log
-                exit $APPLY_EXIT
-              fi
+            else
+              # Different error, fail immediately
+              cat /tmp/apply_output.log
+              exit $APPLY_EXIT
             fi
           fi
           
@@ -350,3 +295,4 @@ jobs:
         run: |
           echo "❌ Deployment Failed!"
           exit 1
+```
