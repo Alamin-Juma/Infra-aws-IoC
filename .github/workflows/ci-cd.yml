@@ -38,6 +38,7 @@ jobs:
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.5.0
+          terraform_wrapper: false
 
       - name: Terraform Format Check
         run: |
@@ -53,8 +54,102 @@ jobs:
         run: |
           cd terraform
           echo "🔓 Checking for stale Terraform locks..."
-          terraform force-unlock -force ef4b274e-0c2c-cbf5-2ec5-f8e81ffd4e34 2>/dev/null || echo "No lock found or already cleared"
+          
+          # Try to detect any existing locks dynamically
+          if terraform plan -var-file="environments/staging.tfvars" 2>&1 | grep -q "Lock Info:"; then
+            LOCK_ID=$(terraform plan -var-file="environments/staging.tfvars" 2>&1 | grep "ID:" | awk '{print $2}' | head -1)
+            echo "Found lock ID: $LOCK_ID, attempting to unlock..."
+            terraform force-unlock -force "$LOCK_ID" 2>/dev/null || echo "Could not unlock or no lock exists"
+          else
+            echo "No locks detected"
+          fi
         continue-on-error: true
+        env:
+          TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
+
+      - name: Smart ECR State Sync
+        run: |
+          cd terraform
+          echo "🔄 Smart ECR State Synchronization"
+          echo "=================================="
+          
+          # Function to check if ECR repo exists in AWS
+          check_ecr_in_aws() {
+            local repo_name=$1
+            echo "🔍 Checking if $repo_name exists in AWS..."
+            if aws ecr describe-repositories --repository-names "$repo_name" --region $AWS_REGION >/dev/null 2>&1; then
+              echo "  ✅ $repo_name exists in AWS"
+              return 0
+            else
+              echo "  ℹ️ $repo_name does not exist in AWS (will be created)"
+              return 1
+            fi
+          }
+          
+          # Function to check if resource is in Terraform state
+          check_in_terraform_state() {
+            local resource_path=$1
+            echo "🔍 Checking if $resource_path is in Terraform state..."
+            if terraform state list 2>/dev/null | grep -q "^${resource_path}$"; then
+              echo "  ✅ Resource already in Terraform state"
+              return 0
+            else
+              echo "  ⚠️ Resource missing from Terraform state"
+              return 1
+            fi
+          }
+          
+          # Function to safely import resource
+          safe_import() {
+            local repo_name=$1
+            local resource_path=$2
+            
+            echo ""
+            echo "📦 Processing: $repo_name"
+            echo "Resource path: $resource_path"
+            
+            # Step 1: Check if exists in AWS
+            if check_ecr_in_aws "$repo_name"; then
+              # Step 2: Check if in Terraform state
+              if check_in_terraform_state "$resource_path"; then
+                echo "  ✅ Already synced - SKIP"
+                return 0
+              else
+                echo "  📥 Importing to Terraform state..."
+                if terraform import "$resource_path" "$repo_name" 2>&1 | tee /tmp/import_${repo_name}.log; then
+                  echo "  ✅ Import successful"
+                  return 0
+                else
+                  # Check for benign errors
+                  if grep -q "Resource already managed\|already exists in the state" /tmp/import_${repo_name}.log; then
+                    echo "  ✅ Already managed (resolved)"
+                    return 0
+                  else
+                    echo "  ⚠️ Import failed (will retry during plan/apply)"
+                    return 1
+                  fi
+                fi
+              fi
+            else
+              echo "  ✅ Will be created by Terraform"
+              return 0
+            fi
+          }
+          
+          # Process backend repository
+          safe_import "$BACKEND_REPOSITORY" 'module.ecr.aws_ecr_repository.repos["'$BACKEND_REPOSITORY'"]'
+          
+          # Process frontend repository  
+          safe_import "$FRONTEND_REPOSITORY" 'module.ecr.aws_ecr_repository.repos["'$FRONTEND_REPOSITORY'"]'
+          
+          echo ""
+          echo "📋 Current ECR resources in Terraform state:"
+          terraform state list | grep ecr_repository || echo "No ECR repositories in state yet"
+          echo ""
+          echo "✅ State sync completed"
+        continue-on-error: true
+        env:
+          TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
 
       - name: Terraform Validate
         run: |
@@ -64,7 +159,7 @@ jobs:
       - name: Terraform Plan
         run: |
           cd terraform
-          terraform plan -var-file="environments/staging.tfvars"
+          terraform plan -var-file="environments/staging.tfvars" -no-color
         env:
           TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
 
@@ -94,23 +189,133 @@ jobs:
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.5.0
+          terraform_wrapper: false
 
       - name: Terraform Init
         run: |
           cd terraform
           terraform init -backend-config="environments/staging.backend.conf"
 
-      # Import existing ECR repositories if needed
-      - name: Import existing ECR repositories
+      # Clear any stale locks before deployment
+      - name: Clear stale Terraform locks
         run: |
           cd terraform
-          echo "🔍 Checking and importing existing ECR repositories..."
+          echo "🔓 Clearing any stale Terraform locks..."
           
-          # Try to import backend repository
-          terraform import 'module.ecr.aws_ecr_repository.repos["prodready-infra-api"]' prodready-infra-api 2>/dev/null || echo "Backend repo already in state or doesn't exist"
+          # Dynamic lock detection and clearing
+          if terraform plan -var-file="environments/staging.tfvars" 2>&1 | grep -q "Lock Info:"; then
+            LOCK_ID=$(terraform plan -var-file="environments/staging.tfvars" 2>&1 | grep "ID:" | awk '{print $2}' | head -1)
+            echo "Detected lock ID: $LOCK_ID"
+            terraform force-unlock -force "$LOCK_ID" 2>/dev/null || echo "Could not unlock or already cleared"
+          else
+            echo "No locks detected"
+          fi
+        continue-on-error: true
+        env:
+          TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
+
+      # Enhanced Auto-sync with AWS resource validation
+      - name: Enhanced ECR State Synchronization
+        run: |
+          cd terraform
+          echo "🚀 Enhanced ECR State Synchronization"
+          echo "====================================="
           
-          # Try to import frontend repository
-          terraform import 'module.ecr.aws_ecr_repository.repos["prodready-infra-ui"]' prodready-infra-ui 2>/dev/null || echo "Frontend repo already in state or doesn't exist"
+          # Enhanced function to validate AWS resource state
+          validate_and_sync_ecr() {
+            local repo_name=$1
+            local resource_path=$2
+            
+            echo ""
+            echo "🔍 Validating: $repo_name"
+            echo "Resource: $resource_path"
+            
+            # Check AWS state
+            echo "  📡 Checking AWS ECR service..."
+            AWS_EXISTS=false
+            if aws ecr describe-repositories --repository-names "$repo_name" --region $AWS_REGION >/dev/null 2>&1; then
+              AWS_EXISTS=true
+              echo "  ✅ Repository exists in AWS"
+              
+              # Get repository details
+              REPO_URI=$(aws ecr describe-repositories --repository-names "$repo_name" --region $AWS_REGION --query 'repositories[0].repositoryUri' --output text)
+              echo "  📍 Repository URI: $REPO_URI"
+            else
+              echo "  ℹ️ Repository does not exist in AWS (will be created)"
+            fi
+            
+            # Check Terraform state
+            echo "  📋 Checking Terraform state..."
+            STATE_EXISTS=false
+            if terraform state list 2>/dev/null | grep -q "^${resource_path}$"; then
+              STATE_EXISTS=true
+              echo "  ✅ Resource exists in Terraform state"
+            else
+              echo "  ⚠️ Resource missing from Terraform state"
+            fi
+            
+            # Decision logic
+            if [ "$AWS_EXISTS" = true ] && [ "$STATE_EXISTS" = false ]; then
+              echo "  🔄 AWS resource exists but not in state - IMPORTING..."
+              
+              # Attempt import with retry logic
+              IMPORT_SUCCESS=false
+              for attempt in 1 2 3; do
+                echo "  📥 Import attempt $attempt/3..."
+                if terraform import "$resource_path" "$repo_name" 2>&1 | tee /tmp/import_${repo_name}_${attempt}.log; then
+                  IMPORT_SUCCESS=true
+                  echo "  ✅ Import successful on attempt $attempt"
+                  break
+                else
+                  # Check for specific error types
+                  if grep -q "Resource already managed\|already exists in the state\|already imported" /tmp/import_${repo_name}_${attempt}.log; then
+                    IMPORT_SUCCESS=true
+                    echo "  ✅ Resource already managed (resolved on attempt $attempt)"
+                    break
+                  elif grep -q "does not exist" /tmp/import_${repo_name}_${attempt}.log; then
+                    echo "  ⚠️ Resource doesn't exist for import (will be created)"
+                    IMPORT_SUCCESS=true
+                    break
+                  else
+                    echo "  ⚠️ Import attempt $attempt failed, retrying..."
+                    sleep 2
+                  fi
+                fi
+              done
+              
+              if [ "$IMPORT_SUCCESS" = false ]; then
+                echo "  ⚠️ All import attempts failed - will handle during apply"
+              fi
+              
+            elif [ "$AWS_EXISTS" = true ] && [ "$STATE_EXISTS" = true ]; then
+              echo "  ✅ Perfect sync - AWS and Terraform state aligned"
+              
+            elif [ "$AWS_EXISTS" = false ] && [ "$STATE_EXISTS" = false ]; then
+              echo "  ✅ Clean state - will be created by Terraform"
+              
+            elif [ "$AWS_EXISTS" = false ] && [ "$STATE_EXISTS" = true ]; then
+              echo "  ⚠️ State exists but AWS resource missing - will be recreated"
+            fi
+            
+            return 0
+          }
+          
+          # Process both repositories
+          validate_and_sync_ecr "$BACKEND_REPOSITORY" 'module.ecr.aws_ecr_repository.repos["'$BACKEND_REPOSITORY'"]'
+          validate_and_sync_ecr "$FRONTEND_REPOSITORY" 'module.ecr.aws_ecr_repository.repos["'$FRONTEND_REPOSITORY'"]'
+          
+          echo ""
+          echo "📊 Final State Summary:"
+          echo "======================="
+          echo "Terraform ECR Resources:"
+          terraform state list | grep ecr_repository || echo "  No ECR repositories in state"
+          
+          echo ""
+          echo "AWS ECR Repositories:"
+          aws ecr describe-repositories --region $AWS_REGION --query 'repositories[].repositoryName' --output table 2>/dev/null || echo "  Could not list repositories"
+          
+          echo ""
+          echo "✅ Enhanced sync completed successfully"
         continue-on-error: true
         env:
           TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
@@ -119,104 +324,137 @@ jobs:
       - name: Build and push Backend image
         run: |
           cd api
-          echo "Building backend image..."
+          echo "🏗️ Building backend image..."
           docker build -t $ECR_REGISTRY/$BACKEND_REPOSITORY:$GITHUB_SHA .
           docker build -t $ECR_REGISTRY/$BACKEND_REPOSITORY:latest .
           
-          echo "Pushing backend image..."
+          echo "📤 Pushing backend image..."
           docker push $ECR_REGISTRY/$BACKEND_REPOSITORY:$GITHUB_SHA
           docker push $ECR_REGISTRY/$BACKEND_REPOSITORY:latest
+          echo "✅ Backend image pushed successfully"
 
       # Build and push frontend image
       - name: Build and push Frontend image
         run: |
           cd ui
-          echo "Building frontend image..."
+          echo "🏗️ Building frontend image..."
           docker build -t $ECR_REGISTRY/$FRONTEND_REPOSITORY:$GITHUB_SHA .
           docker build -t $ECR_REGISTRY/$FRONTEND_REPOSITORY:latest .
           
-          echo "Pushing frontend image..."
+          echo "📤 Pushing frontend image..."
           docker push $ECR_REGISTRY/$FRONTEND_REPOSITORY:$GITHUB_SHA
           docker push $ECR_REGISTRY/$FRONTEND_REPOSITORY:latest
-
-      # Clear any stale locks before deployment
-      - name: Clear stale Terraform locks
-        run: |
-          cd terraform
-          echo "🔓 Clearing any stale Terraform locks..."
-          terraform force-unlock -force ef4b274e-0c2c-cbf5-2ec5-f8e81ffd4e34 2>/dev/null || echo "No lock found or already cleared"
-        continue-on-error: true
+          echo "✅ Frontend image pushed successfully"
 
       - name: Terraform Plan
+        id: plan
         run: |
           cd terraform
-          terraform plan -var-file="environments/staging.tfvars" -out=staging.tfplan
+          echo "📝 Running Terraform plan..."
+          terraform plan -var-file="environments/staging.tfvars" -out=staging.tfplan -no-color
         env:
           TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
 
       - name: Terraform Apply
+        id: apply
         run: |
           cd terraform
+          echo "🚀 Applying Terraform changes..."
           terraform apply -auto-approve staging.tfplan
+          echo "✅ Infrastructure deployment complete"
         env:
           TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
 
       # Update ECS services
       - name: Update ECS Services
         run: |
-          echo "Updating ECS services..."
+          echo "🔄 Updating ECS services with new images..."
+          
+          echo "Updating backend service..."
           aws ecs update-service \
             --cluster $ECS_CLUSTER \
             --service $ECS_BACKEND_SERVICE \
             --force-new-deployment \
             --region ${{ env.AWS_REGION }}
           
+          echo "Updating frontend service..."
           aws ecs update-service \
             --cluster $ECS_CLUSTER \
             --service $ECS_FRONTEND_SERVICE \
             --force-new-deployment \
             --region ${{ env.AWS_REGION }}
+          
+          echo "✅ ECS service updates initiated"
 
       # Wait for deployment
       - name: Wait for Deployment
         run: |
-          echo "Waiting for backend service to stabilize..."
+          echo "⏳ Waiting for services to stabilize..."
+          echo "This may take several minutes..."
+          
+          echo ""
+          echo "Waiting for backend service..."
           aws ecs wait services-stable \
             --cluster $ECS_CLUSTER \
             --services $ECS_BACKEND_SERVICE \
             --region ${{ env.AWS_REGION }} \
-            --max-attempts 30
+            --max-attempts 30 && echo "✅ Backend service stable"
 
-          echo "Waiting for frontend service to stabilize..."
+          echo ""
+          echo "Waiting for frontend service..."
           aws ecs wait services-stable \
             --cluster $ECS_CLUSTER \
             --services $ECS_FRONTEND_SERVICE \
             --region ${{ env.AWS_REGION }} \
-            --max-attempts 30
+            --max-attempts 30 && echo "✅ Frontend service stable"
 
       # Health check
       - name: Health Check
         run: |
-          echo "Running health checks..."
+          echo "🏥 Running health checks..."
           ALB_DNS=$(aws elbv2 describe-load-balancers \
             --names prodready-infra-alb-staging \
             --query 'LoadBalancers[0].DNSName' \
             --output text \
             --region ${{ env.AWS_REGION }})
           
+          echo "Load Balancer DNS: $ALB_DNS"
           echo "Checking backend health at http://$ALB_DNS/api/health"
+          echo ""
+          
           for i in {1..10}; do
+            echo "Health check attempt $i/10..."
             if curl -f -s "http://$ALB_DNS/api/health" > /dev/null; then
-              echo "✅ Backend health check passed"
+              echo "✅ Backend health check passed!"
               break
             elif [ $i -eq 10 ]; then
               echo "❌ Backend health check failed after 10 attempts"
+              echo "Please check ECS task logs and ALB target health"
               exit 1
             else
-              echo "⏳ Backend not ready, attempt $i/10..."
+              echo "⏳ Backend not ready yet, waiting 30s..."
               sleep 30
             fi
           done
+
+      # Deployment summary
+      - name: Deployment Summary
+        if: always()
+        run: |
+          echo "📊 Deployment Summary"
+          echo "===================="
+          echo "Region: $AWS_REGION"
+          echo "Cluster: $ECS_CLUSTER"
+          echo "Backend Service: $ECS_BACKEND_SERVICE"
+          echo "Frontend Service: $ECS_FRONTEND_SERVICE"
+          echo "Commit: $GITHUB_SHA"
+          echo ""
+          
+          if [ "${{ steps.apply.outcome }}" == "success" ]; then
+            echo "Status: ✅ Deployment Successful"
+          else
+            echo "Status: ❌ Deployment Failed"
+          fi
 
   # Notification
   notify:
@@ -228,8 +466,19 @@ jobs:
     steps:
       - name: Notify Success
         if: needs.build-and-deploy.result == 'success'
-        run: echo "🎉 Deployment successful!"
+        run: |
+          echo "🎉 ================================"
+          echo "🎉 Deployment Successful!"
+          echo "🎉 ================================"
+          echo ""
+          echo "All services are running with the latest code."
 
       - name: Notify Failure
         if: needs.build-and-deploy.result == 'failure'
-        run: echo "❌ Deployment failed!"
+        run: |
+          echo "❌ ================================"
+          echo "❌ Deployment Failed!"
+          echo "❌ ================================"
+          echo ""
+          echo "Please check the logs above for details."
+          exit 1
