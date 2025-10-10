@@ -1,3 +1,6 @@
+# modules/ecr/main.tf
+
+# Variables
 variable "repositories" {
   description = "List of ECR repository names to create"
   type        = list(string)
@@ -6,15 +9,6 @@ variable "repositories" {
 variable "environment" {
   description = "Environment name"
   type        = string
-}
-
-variable "repository_names" {
-  description = "ECR repository names"
-  type        = set(string)
-  default     = [
-    "prodready-infra-api",        # Make sure these match
-    "prodready-infra-ui"          # your actual repository names
-  ]
 }
 
 # Data source for AWS account ID
@@ -26,14 +20,26 @@ resource "aws_ecr_repository" "repos" {
   name                 = each.key
   image_tag_mutability = "MUTABLE"
   force_delete         = true
-  
+
   image_scanning_configuration {
     scan_on_push = true
   }
-  
+
   tags = {
     Name        = each.key
     Environment = var.environment
+    ManagedBy   = "Terraform"
+  }
+
+  # Prevent accidental deletion but allow updates
+  lifecycle {
+    # Don't destroy repositories that have images
+    prevent_destroy = false
+    
+    # If repository was created outside Terraform, ignore these attributes
+    ignore_changes = [
+      encryption_configuration,
+    ]
   }
 }
 
@@ -41,7 +47,7 @@ resource "aws_ecr_repository" "repos" {
 resource "aws_ecr_repository_policy" "policy" {
   for_each   = toset(var.repositories)
   repository = aws_ecr_repository.repos[each.key].name
-  
+
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -69,16 +75,16 @@ resource "aws_ecr_repository_policy" "policy" {
 resource "aws_ecr_lifecycle_policy" "policy" {
   for_each   = toset(var.repositories)
   repository = aws_ecr_repository.repos[each.key].name
-  
+
   policy = jsonencode({
     rules = [
       {
         rulePriority = 1
-        description  = "Keep last 10 images"
+        description  = "Keep last 10 untagged images"
         selection = {
-          tagStatus     = "untagged"
-          countType     = "imageCountMoreThan"
-          countNumber   = 10
+          tagStatus   = "untagged"
+          countType   = "imageCountMoreThan"
+          countNumber = 10
         }
         action = {
           type = "expire"
@@ -86,12 +92,12 @@ resource "aws_ecr_lifecycle_policy" "policy" {
       },
       {
         rulePriority = 2
-        description  = "Keep production images"
+        description  = "Keep last 30 tagged images"
         selection = {
-          tagStatus     = "tagged"
-          tagPrefixList = ["prod", "production"]
-          countType     = "imageCountMoreThan"
-          countNumber   = 5
+          tagStatus   = "tagged"
+          tagPrefixList = ["latest", "prod", "production", "staging"]
+          countType   = "imageCountMoreThan"
+          countNumber = 30
         }
         action = {
           type = "expire"
@@ -101,8 +107,17 @@ resource "aws_ecr_lifecycle_policy" "policy" {
   })
 }
 
-# Output
+# Outputs
 output "repository_urls" {
   description = "Map of repository names to repository URLs"
-  value = { for name in var.repositories : name => aws_ecr_repository.repos[name].repository_url }
+  value = {
+    for name in var.repositories : name => aws_ecr_repository.repos[name].repository_url
+  }
+}
+
+output "repository_arns" {
+  description = "Map of repository names to repository ARNs"
+  value = {
+    for name in var.repositories : name => aws_ecr_repository.repos[name].arn
+  }
 }
