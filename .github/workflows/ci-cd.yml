@@ -217,26 +217,85 @@ jobs:
       - name: Health Check
         run: |
           echo "🏥 Running health checks..."
-          ALB_DNS=$(aws elbv2 describe-load-balancers \
+          ALB_INFO=$(aws elbv2 describe-load-balancers \
             --names prodready-infra-alb-staging \
-            --query 'LoadBalancers[0].DNSName' \
-            --output text \
             --region ${{ env.AWS_REGION }})
-          
-          echo "Load Balancer: $ALB_DNS"
-          for i in {1..10}; do
-            echo "Health check $i/10..."
-            if curl -f -s "http://$ALB_DNS/api/health" > /dev/null; then
-              echo "✅ Health check passed!"
-              break
-            elif [ $i -eq 10 ]; then
-              echo "❌ Health check failed"
-              exit 1
-            else
-              echo "⏳ Waiting 30s..."
-              sleep 30
-            fi
+          ALB_DNS=$(echo "$ALB_INFO" | jq -r '.LoadBalancers[0].DNSName')
+          ALB_SCHEME=$(echo "$ALB_INFO" | jq -r '.LoadBalancers[0].Scheme')
+          echo "ALB: $ALB_DNS (scheme: $ALB_SCHEME)"
+
+          # If ALB is internal or unreachable externally, validate target health instead of curl
+          if [ "$ALB_SCHEME" = "internal" ]; then
+            echo "🔒 Internal ALB detected. Checking ECS target health..."
+            BACKEND_TG=$(aws ecs describe-services \
+              --cluster $ECS_CLUSTER \
+              --services $ECS_BACKEND_SERVICE \
+              --query 'services[0].loadBalancers[0].targetGroupArn' \
+              --output text --region ${{ env.AWS_REGION }})
+            FRONTEND_TG=$(aws ecs describe-services \
+              --cluster $ECS_CLUSTER \
+              --services $ECS_FRONTEND_SERVICE \
+              --query 'services[0].loadBalancers[0].targetGroupArn' \
+              --output text --region ${{ env.AWS_REGION }})
+
+            check_tg() {
+              local TG_ARN="$1"
+              local NAME="$2"
+              echo "⏳ Waiting for $NAME targets to be healthy..."
+              for i in {1..30}; do
+                STATES=$(aws elbv2 describe-target-health --target-group-arn "$TG_ARN" \
+                  --query 'TargetHealthDescriptions[].TargetHealth.State' --output text --region ${{ env.AWS_REGION }} || true)
+                echo "Attempt $i: $NAME states => $STATES"
+                if [ -n "$STATES" ] && ! echo "$STATES" | grep -qv "healthy"; then
+                  echo "✅ $NAME targets healthy"
+                  return 0
+                fi
+                sleep 10
+              done
+              echo "❌ $NAME targets not healthy after wait"
+              return 1
+            }
+
+            check_tg "$BACKEND_TG" "backend" && check_tg "$FRONTEND_TG" "frontend"
+            exit $?
+          fi
+
+          echo "🌐 Public ALB detected. Curling service endpoints..."
+          HEALTH_PATHS="/api/health /health /actuator/health"
+          PROTOS="http https"
+
+          success=false
+          for proto in $PROTOS; do
+            for path in $HEALTH_PATHS; do
+              echo "Checking: $proto://$ALB_DNS$path"
+              for i in {1..20}; do
+                if curl -fsSL -m 5 -k "$proto://$ALB_DNS$path" > /dev/null; then
+                  echo "✅ Health check passed at $proto://$ALB_DNS$path"
+                  success=true
+                  break 2
+                else
+                  echo "⏳ Not ready ($i/20), retrying..."
+                  sleep 10
+                fi
+              done
+            done
           done
+
+          if [ "$success" != "true" ]; then
+            echo "❌ Health check failed via ALB"
+            echo ""
+            echo "📋 Backend service events (last 10):"
+            aws ecs describe-services --cluster $ECS_CLUSTER --services $ECS_BACKEND_SERVICE \
+              --query 'services[0].events[0:10].[message,createdAt]' --output table --region ${{ env.AWS_REGION }} || true
+            echo ""
+            echo "📋 Target health summary:"
+            BACKEND_TG=$(aws ecs describe-services --cluster $ECS_CLUSTER --services $ECS_BACKEND_SERVICE \
+              --query 'services[0].loadBalancers[0].targetGroupArn' --output text --region ${{ env.AWS_REGION }} || true)
+            if [ "$BACKEND_TG" != "None" ]; then
+              aws elbv2 describe-target-health --target-group-arn "$BACKEND_TG" --output table --region ${{ env.AWS_REGION }} || true
+            fi
+            exit 1
+          fi
 
       - name: Deployment Summary
         if: always()
