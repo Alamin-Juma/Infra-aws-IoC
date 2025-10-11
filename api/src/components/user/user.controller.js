@@ -54,14 +54,14 @@ export const updateUser = async (req, res) => {
   }
 };
 
-export const deleteUser = async (req, res) => {
+export const deleteUser = asyncHandler( async (req, res) => {
   try {
-    await userService.deleteUser(req.params.id);
+    await userService.deleteUser(req.params.id, req.user?.id);
     res.status(204).send();
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
-};
+});
 
 
 export const getActiveUsers = async (req, res) => {

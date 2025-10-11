@@ -40,8 +40,10 @@ export const permissionsSeed = async () => {
     ['Create_Role', true, false, false, false, false],
     ['View Repair Requests', true, false, false, false, false],
     ['Create_Repair_Request', true, false, false, false, false],
-    ['Delete_Repair_Request', true, false, false, false, false]
+    ['Delete_Repair_Request', true, false, false, false, false],
+    ['Update_Repair_Request', true, false, false, false, false],
 
+    ['Update Repair Device Status', true, false, false, false, false],
   ];
 
   // Fetch all roles and permissions in one query each

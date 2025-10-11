@@ -27,7 +27,7 @@ const sendEmail = async (to, subject, html) => {
   try {
     await transporter.sendMail(mailOptions);
   } catch (error) {    
-    throw new Error(`Failed to send email: ${error.message}`);
+    throw new Error('Failed to send email');
   }
 };
 
@@ -44,7 +44,7 @@ const assignDevice = async (id, data) => {
       throw new Error('User not found');
     }
 
-
+  
     const deviceStatus = await prisma.deviceStatus.findFirst({
       where: { name: 'assigned' },
     });

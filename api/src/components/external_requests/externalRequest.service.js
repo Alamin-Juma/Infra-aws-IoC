@@ -912,6 +912,24 @@ const getTicketById = async (id) => {
 };
 
 const updateTicket = async (req, id, data) => {
+    const userId = Number(req.user.id);
+    const userOwnsRequest = await prisma.externalRequest.count({
+      where: {
+        id: Number(id),
+        userId,
+      },
+    });
+
+    const isCurrentUserSelfAssigning =
+      data?.assignedUser && userId == data.assignedUser;
+
+    if (userOwnsRequest == 1 && isCurrentUserSelfAssigning) {
+      throw new AppError(
+        'VALIDATION_ERROR',
+        `You are not allowed to assign or unassign your own external request.`,
+      );
+    }
+
   try {
     const updatedTicket = await prisma.externalRequest.update({
       where: { id: Number(id) },
@@ -968,6 +986,20 @@ const updateTicket = async (req, id, data) => {
 };
 
 const updateTicketStatus = async (req, id, action, reason = "") => {
+  const userOwnsRequest = await prisma.externalRequest.count({
+    where: {
+      id: Number(id),
+      userId: Number(req.user.id),
+    },
+  });
+
+  if (userOwnsRequest == 1) {
+    throw new AppError(
+      'VALIDATION_ERROR',
+      `You are not allowed to update your own external request.`,
+    );
+  }
+
   try {
     const updatedTicketStatus = await prisma.externalRequest.update({
       where: { 

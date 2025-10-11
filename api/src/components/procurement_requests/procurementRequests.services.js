@@ -282,6 +282,7 @@ export const getProcurementRequestsItemByID = async ({ id }) => {
 };
 
 export const updateProcurementRequestItemByID = async ({ id, ...data }) => {
+  data.quantity = Number(data.quantity);
   const { deviceType, ...otherData } = data;
 
   return prisma.procurementRequestItem.update({

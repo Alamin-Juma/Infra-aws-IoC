@@ -8,7 +8,12 @@ dotenv.config();
 export const forgotPassword = async (req, res) => {
     try {
         const user = await passwordResetService.getUserByEmail(req.body.email);
-        if (!user) return res.status(404).json({ error: 'User not found' });
+        if (!user) return res
+          .status(200)
+          .json({
+            error:
+              'If an account exists for this email, a reset link will be sent with further instructions',
+          });
         const generated_token = generatePasswordResetToken();
         const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);  // 24 hours from now
         const password_reset = await passwordResetService.createPasswordReset({ userId: user.id, token: generated_token, status: false, expiresAt: expiresAt });

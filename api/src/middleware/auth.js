@@ -9,8 +9,7 @@ const exemptPaths = [
   '/requestTypes/verify',
   '/deviceTypes',
   '/externalRequest',
-  '/health',
-  '/api/health'
+  '/health'
 ];
 
 export const authenticateToken = (req, res, next) => {

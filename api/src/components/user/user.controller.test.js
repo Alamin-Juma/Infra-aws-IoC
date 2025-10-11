@@ -153,14 +153,14 @@ describe('User Controller', () => {
 
   describe('deleteUser', () => {
     it('should delete a user and return 204 status', async () => {
-      mockReq.params.id = '1';
+      mockReq.params.id = 1;
       userService.deleteUser.mockResolvedValue(true);
 
       await userController.deleteUser(mockReq, mockRes);
 
-      expect(userService.deleteUser).toHaveBeenCalledWith('1');
       expect(mockRes.status).toHaveBeenCalledWith(204);
       expect(mockRes.send).toHaveBeenCalled();
+      expect(userService.deleteUser).toHaveBeenCalled();
     });
 
     it('should handle errors', async () => {

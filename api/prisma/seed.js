@@ -192,7 +192,10 @@ async function main() {
       { name: 'create_request_type', routeName: 'Create Request Type' },
       { name: 'manage_request_type', routeName: 'Manage Request Type' },
       { name: 'delete_request_type', routeName: 'Delete Request Type' },
-      { name: 'approve_external_request', routeName: 'Approve External Request' },
+      {
+        name: 'approve_external_request',
+        routeName: 'Approve External Request',
+      },
       {
         name: 'view_preventive_maintenance',
         routeName: 'View Preventive Maintenance',
@@ -232,9 +235,16 @@ async function main() {
         name: 'view_repair_requests',
         routeName: 'View Repair Requests',
       },
-      
+
       { name: 'create_repair_request', routeName: 'Create Repair Request' },
       { name: 'delete_repair_request', routeName: 'Delete Repair Request' },
+      {
+        name: 'update_repair_device_status',
+        routeName: 'Update Repair Device Status',
+      },
+      { name: 'update_repair_request', routeName: 'Update Repair Request' },
+      { name: 'delete_procurement_request', routeName: 'Delete Procurement Request'},
+      { name: 'manage_procurement_request', routeName: 'Manage Procurement Request'},
     ],
 
     skipDuplicates: true,

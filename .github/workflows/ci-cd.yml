@@ -217,72 +217,25 @@ jobs:
       - name: Health Check
         run: |
           echo "🏥 Running health checks..."
-          ALB_INFO=$(aws elbv2 describe-load-balancers \
-            --names prodready-infra-alb-staging \
-            --region ${{ env.AWS_REGION }})
-          ALB_DNS=$(echo "$ALB_INFO" | jq -r '.LoadBalancers[0].DNSName')
-          ALB_SCHEME=$(echo "$ALB_INFO" | jq -r '.LoadBalancers[0].Scheme')
-          echo "ALB: $ALB_DNS (scheme: $ALB_SCHEME)"
+          HEALTH_URL="http://prodready-infra-alb-staging-212250592.us-east-1.elb.amazonaws.com/api/health"
+          echo "Health check URL: $HEALTH_URL"
 
-          # If ALB is internal or unreachable externally, validate target health instead of curl
-          if [ "$ALB_SCHEME" = "internal" ]; then
-            echo "🔒 Internal ALB detected. Checking ECS target health..."
-            BACKEND_TG=$(aws ecs describe-services \
-              --cluster $ECS_CLUSTER \
-              --services $ECS_BACKEND_SERVICE \
-              --query 'services[0].loadBalancers[0].targetGroupArn' \
-              --output text --region ${{ env.AWS_REGION }})
-            FRONTEND_TG=$(aws ecs describe-services \
-              --cluster $ECS_CLUSTER \
-              --services $ECS_FRONTEND_SERVICE \
-              --query 'services[0].loadBalancers[0].targetGroupArn' \
-              --output text --region ${{ env.AWS_REGION }})
-
-            check_tg() {
-              local TG_ARN="$1"
-              local NAME="$2"
-              echo "⏳ Waiting for $NAME targets to be healthy..."
-              for i in {1..30}; do
-                STATES=$(aws elbv2 describe-target-health --target-group-arn "$TG_ARN" \
-                  --query 'TargetHealthDescriptions[].TargetHealth.State' --output text --region ${{ env.AWS_REGION }} || true)
-                echo "Attempt $i: $NAME states => $STATES"
-                if [ -n "$STATES" ] && ! echo "$STATES" | grep -qv "healthy"; then
-                  echo "✅ $NAME targets healthy"
-                  return 0
-                fi
-                sleep 10
-              done
-              echo "❌ $NAME targets not healthy after wait"
-              return 1
-            }
-
-            check_tg "$BACKEND_TG" "backend" && check_tg "$FRONTEND_TG" "frontend"
-            exit $?
-          fi
-
-          echo "🌐 Public ALB detected. Curling service endpoints..."
-          HEALTH_PATHS="/api/health /health /actuator/health"
-          PROTOS="http https"
-
+          echo "🌐 Checking API health endpoint..."
           success=false
-          for proto in $PROTOS; do
-            for path in $HEALTH_PATHS; do
-              echo "Checking: $proto://$ALB_DNS$path"
-              for i in {1..20}; do
-                if curl -fsSL -m 5 -k "$proto://$ALB_DNS$path" > /dev/null; then
-                  echo "✅ Health check passed at $proto://$ALB_DNS$path"
-                  success=true
-                  break 2
-                else
-                  echo "⏳ Not ready ($i/20), retrying..."
-                  sleep 10
-                fi
-              done
-            done
+          for i in {1..20}; do
+            echo "Attempt $i/20: Checking $HEALTH_URL"
+            if curl -fsSL -m 10 -k "$HEALTH_URL" > /dev/null; then
+              echo "✅ Health check passed at $HEALTH_URL"
+              success=true
+              break
+            else
+              echo "⏳ Health check failed, retrying in 15 seconds..."
+              sleep 15
+            fi
           done
 
           if [ "$success" != "true" ]; then
-            echo "❌ Health check failed via ALB"
+            echo "❌ Health check failed after 20 attempts"
             echo ""
             echo "📋 Backend service events (last 10):"
             aws ecs describe-services --cluster $ECS_CLUSTER --services $ECS_BACKEND_SERVICE \
@@ -294,28 +247,11 @@ jobs:
             if [ "$BACKEND_TG" != "None" ]; then
               aws elbv2 describe-target-health --target-group-arn "$BACKEND_TG" --output table --region ${{ env.AWS_REGION }} || true
             fi
+            echo ""
+            echo "🔍 Manual check command:"
+            echo "curl -v $HEALTH_URL"
             exit 1
           fi
-
-      - name: Debug Container Setup
-        run: |
-          echo "🔍 Debugging container configuration..."
-          aws ecs describe-task-definition --task-definition $ECS_BACKEND_SERVICE \
-            --query 'taskDefinition.containerDefinitions[0].portMappings' \
-            --output json --region ${{ env.AWS_REGION }}
-        
-          # Check the environment variables
-          aws ecs describe-task-definition --task-definition $ECS_BACKEND_SERVICE \
-            --query 'taskDefinition.containerDefinitions[0].environment' \
-            --output json --region ${{ env.AWS_REGION }}
-        
-          # Check logs from the failed container
-          aws logs get-log-events \
-            --log-group-name "/aws/ecs/$ECS_CLUSTER/$ECS_BACKEND_SERVICE" \
-            --log-stream-name "$(aws logs describe-log-streams \
-              --log-group-name "/aws/ecs/$ECS_CLUSTER/$ECS_BACKEND_SERVICE" \
-              --query 'logStreams[0].logStreamName' --output text)" \
-            --limit 20 --region ${{ env.AWS_REGION }} || echo "Couldn't get logs"
 
       - name: Deployment Summary
         if: always()

@@ -35,7 +35,7 @@ export const ApproveRejectProcurementRequest = asyncHandler(
         ),
       );
     }
-    if (action === ProcurementRequestStatus.Rejected && !reason)  {
+    if (action === ProcurementRequestStatus.Rejected && !comment)  {
       return next(
         new AppError(
           'VALIDATION_ERROR',

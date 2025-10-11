@@ -1,5 +1,6 @@
 import { PrismaClient, RepairDeviceStatus, RepairRequestStatus } from "@prisma/client";
 import { AppError } from "../../middleware/errorHandler.js";
+import {isValidRepairDeviceStatusTransition}  from "./repairRequest.validator.js";
 import sanitizeHtml from 'sanitize-html';
 
 const prisma = new PrismaClient();
@@ -61,7 +62,15 @@ export const getRepairRequests = async ({
                 assignedOn: true,
                 assignedTo: { select: { id: true, firstName: true, lastName: true } },
                 deviceType: { select: { id: true, name: true } },
-                _count: true,
+                    _count: {
+                        select: {
+                            repairDevices: {
+                                where: {
+                                    isDeleted: false,
+                                }
+                            }
+                        }
+                    }
                 },
             }),
             prisma.repairRequest.count({ where: defaultFilters }),
@@ -191,13 +200,20 @@ export const createRepairRequestService = async (req) => {
         throw new AppError('VALIDATION_ERROR', `Please add at least one affected device.`);
     }
 
-    const [deviceTypeExists, foundCount, assigneeExists] = await Promise.all([
+    const [deviceTypeExists, foundCount, matchingDevices, assigneeExists] = await Promise.all([
         prisma.deviceType.findUnique({
             where: { id: Number(deviceType) },
             select: { id: true }
         }),
         prisma.device.count({
             where: { id: { in: affectedDevices } }
+        }),
+        await prisma.device.findMany({
+            where: {
+                id: { in: affectedDevices },
+                deviceTypeId: Number(deviceType),
+            },
+            select: { id: true },
         }),
         assignedTo ? prisma.user.findUnique({
             where: { id: Number(assignedTo) }
@@ -210,6 +226,10 @@ export const createRepairRequestService = async (req) => {
 
     if (foundCount !== affectedDevices.length) {
         throw new AppError('VALIDATION_ERROR', `Invalid device IDs.`);
+    }
+
+    if(matchingDevices.length !== affectedDevices.length) {
+        throw new AppError('VALIDATION_ERROR', `Some devices do not match the repair request's device type`);
     }
 
     const assignedRequest = {};
@@ -339,3 +359,344 @@ export const deleteRepairRequestsById = async (repairRequestId, deletedById) => 
     return updatedRepairRequest;
 };
 
+export const updateRepairRequestDeviceStatusService = async ({
+  id: repairRequestId,
+  deviceId,
+  status,
+  userId,
+}) => {
+
+
+
+  if (status == RepairDeviceStatus.ASSIGNED_TO_VENDOR) {
+    throw new AppError('FORBIDDEN', `${status} is not allowed at the moment`);
+  }
+
+  const device = await prisma.repairDevice.findFirst({
+    where: { repairRequestId, deviceId, isDeleted: false },
+    select: {
+      id: true,
+      currentStatus: true,
+    },
+  });
+
+  if (!device) {
+    throw new AppError('NOT_FOUND', 'Repair request device was not found');
+  }
+
+  const allowed = isValidRepairDeviceStatusTransition(
+    device.currentStatus,
+    status,
+  );
+
+  if (allowed) {
+    const result = await prisma.$transaction(async (tx) => {
+      const updated = await tx.repairDevice.update({
+        where: { id: device.id },
+        data: {
+          currentStatus: status,
+          repairDeviceHistory: {
+            create: {
+              deviceStatus: status,
+              createdBy: { connect: { id: userId } },
+            },
+          },
+        },
+        select: {
+          id: true,
+          deviceId: true,
+          device: { select: { serialNumber: true } },
+          createdOn: true,
+          createdBy: { select: { id: true, firstName: true, lastName: true } },
+          currentStatus: true,
+          repairDeviceHistory:
+            status == RepairDeviceStatus.ASSIGNED_TO_VENDOR
+              ? {
+                  select: {
+                    vendor: { select: { name: true } },
+                    notes: true,
+                    deviceStatus: true,
+                    createdBy: true,
+                    createdOn: true,
+                  },
+                }
+              : {
+                  select: {
+                    deviceStatus: true,
+                    createdBy: {
+                      select: { id: true, firstName: true, lastName: true },
+                    },
+                    createdOn: true,
+                  },
+                },
+        },
+      });
+
+      await tx.repairRequest.updateMany({
+        where: {
+          id: repairRequestId,
+          repairDevices: {
+            some: {
+              isDeleted: false,
+              currentStatus: {
+                notIn: [RepairDeviceStatus.FIXED, RepairDeviceStatus.RETIRED],
+              },
+            },
+          },
+        },
+        data: { currentStatus: RepairRequestStatus.IN_PROGRESS },
+      });
+
+      await tx.repairRequest.updateMany({
+        where: {
+          id: repairRequestId,
+          repairDevices: {
+            none: {
+              isDeleted: false,
+              currentStatus: {
+                notIn: [RepairDeviceStatus.FIXED, RepairDeviceStatus.RETIRED],
+              },
+            },
+          },
+        },
+        data: { currentStatus: RepairRequestStatus.COMPLETED },
+      });
+
+      return updated;
+    });
+
+    return result;
+  }
+
+  throw new AppError('SERVER_ERROR', 'Repair request device was not updated');
+}
+
+export const updateRepairRequestService = async (req) => {
+    const id = Number(req.params.id);
+    const userId = Number(req.user.id);
+
+    const { description, severity, deviceType, affectedDevices, assignedTo, location } = req.body;
+
+    const updated = await prisma.$transaction(async (tx) => {
+
+        const existing = await tx.repairRequest.findUnique({
+            where: { id },
+            select: { id: true, repairDevices: true, assignedToId: true, deviceTypeId: true }
+        });
+
+    
+        if (!existing) {
+            throw new AppError('NOT_FOUND', 'Repair request was not found');
+        }
+
+        if(existing.assignedToId) {
+            throw new AppError('VALIDATION_ERROR', "Can't edit a repair request that's already assigned");
+        }
+
+        if (deviceType !== undefined && Number(deviceType) !== existing.deviceTypeId) {
+            throw new AppError('VALIDATION_ERROR', 'Changing device type of a repair request is not allowed.');
+        }
+
+        const updatedData = {};
+
+        if (description !== undefined && description !== existing.description) {
+            const sanitizedDescription = sanitizeHtml(description, { allowedTags: [], allowedAttributes: {} }).trim();
+            if (!sanitizedDescription) {
+                throw new AppError('VALIDATION_ERROR', "HTML tags and attributes are not allowed in the description.");
+            }
+            updatedData.description = sanitizedDescription;
+        }
+
+        if (severity !== undefined && severity !== existing.severity) {
+            updatedData.severity = severity;
+        }
+
+        if (deviceType !== undefined && deviceType !== existing.deviceTypeId) {
+            updatedData.deviceTypeId = Number(deviceType);
+        }
+
+        if (assignedTo !== undefined && assignedTo !== existing.assignedToId) {
+            const assigneeExists = prisma.user.findUnique({ where: { id: Number(assignedTo) }, select: { id: true }});
+
+            if (!assigneeExists) {
+                throw new AppError('VALIDATION_ERROR', 'Selected user does not exist');
+            }
+
+            updatedData.assignedOn = new Date();
+            updatedData.assignedById = userId;
+            updatedData.assignedToId = Number(assignedTo);
+        }
+
+        if (location !== undefined && location !== existing.location) {
+            const sanitizedLocation = location ? sanitizeHtml(location, { allowedTags: [], allowedAttributes: {} }) : null;
+            updatedData.location = sanitizedLocation;
+        }
+        
+        if (Object.keys(updatedData).length > 0) {
+            await tx.repairRequest.update({
+                where: { id },
+                data: updatedData
+            });
+        }
+
+        if (affectedDevices !== undefined) {
+            const devices = await tx.device.findMany({
+                where: { id: { in: affectedDevices } },
+                select: { id: true, deviceTypeId: true }
+            });
+
+            const mismatched = devices.filter(d => d.deviceTypeId !== existing.deviceTypeId);
+            if (mismatched.length > 0) {
+                throw new AppError(
+                    'VALIDATION_ERROR',
+                    `Some devices do not match the repair request's device type`
+                );
+            }
+
+            const newDeviceIds = affectedDevices;
+
+            const existingRepairDevices = await tx.repairDevice.findMany({
+                where: { repairRequestId: existing.id }
+            });
+
+            const existingDeviceIds = existingRepairDevices.filter(d => !d.isDeleted).map(d => d.deviceId);
+
+            const toAdd = newDeviceIds.filter(id => !existingDeviceIds.includes(id));
+            const toRemove = existingDeviceIds.filter(id => !newDeviceIds.includes(id));
+
+            const toReactivate = toAdd.filter(deviceId =>
+                existingRepairDevices.some(d => d.deviceId === deviceId && d.isDeleted)
+            );
+
+            const toTrulyAdd = toAdd.filter(deviceId =>
+                !existingRepairDevices.some(d => d.deviceId === deviceId)
+            );
+
+            // Reactivate soft deleted devices
+            if (toReactivate.length > 0) {
+                await tx.repairDevice.updateMany({
+                    where: {
+                        repairRequestId: existing.id,
+                        deviceId: { in: toReactivate },
+                        isDeleted: true
+                    },
+                    data: {
+                        isDeleted: false,
+                        deletedById: null,
+                        deletedOn: null,
+                        currentStatus: RepairDeviceStatus.PENDING
+                    }
+                });
+
+                // Create history records for reactivated devices
+                await tx.repairDeviceHistory.createMany({
+                    data: toReactivate.map(deviceId => ({
+                        repairDeviceId: existingRepairDevices.find(d => d.deviceId === deviceId)?.id,
+                        deviceStatus: RepairDeviceStatus.PENDING,
+                        createdById: userId,
+                        notes: 'Device reactivated in repair request'
+                    }))
+                });
+            }
+            
+            // Add truly new devices
+            if (toTrulyAdd.length > 0) {
+                const created = await Promise.all(
+                    toTrulyAdd.map(deviceId =>
+                        tx.repairDevice.create({
+                            data: {
+                                repairRequestId: existing.id,
+                                deviceId,
+                                isDeleted: false,
+                                currentStatus: RepairDeviceStatus.PENDING,
+                                createdOn: new Date(),
+                                createdById: userId
+                            }
+                        })
+                    )
+                );
+
+                await tx.repairDeviceHistory.createMany({
+                    data: created.map(device => ({
+                        repairDeviceId: Number(device.id),
+                        deviceStatus: RepairDeviceStatus.PENDING,
+                        createdById: Number(req.user.id),
+                        notes: 'Device added to repair request'
+                    }))
+                });
+            }
+
+            // Soft delete devices no longer in the list
+            if (toRemove.length > 0) {
+                await tx.repairDevice.updateMany({
+                    where: {
+                        repairRequestId: existing.id,
+                        deviceId: { in: toRemove },
+                        isDeleted: false
+                    },
+                    data: {
+                        isDeleted: true,
+                        deletedById: userId,
+                        deletedOn: new Date()
+                    }
+                });
+
+                await tx.repairDeviceHistory.createMany({
+                    data: toRemove.map(deviceId => ({
+                        repairDeviceId: existingRepairDevices.find(d => d.deviceId === deviceId)?.id,
+                        deviceStatus: RepairDeviceStatus.PENDING,
+                        createdById: userId,
+                        notes: 'Device removed from repair request'
+                    }))
+                });
+            }
+        }
+
+        return await tx.repairRequest.findUnique({
+            where: { id },
+            include: { repairDevices: true }
+        });
+    });
+
+    return updated;
+};
+
+export const getRepairRequestsSummaryService = async () => {
+    
+  const allRecords = await prisma.repairRequest.count({
+    where: {
+      isDeleted: false,
+    },
+  });
+
+  const result = await prisma.repairRequest.groupBy({
+    where: {
+      isDeleted: false,
+    },
+    by: ['currentStatus'],
+    _count: true,
+  });
+
+  await prisma.$disconnect();
+
+  if (!result) {
+    throw new AppError('SERVER_ERROR', 'Failed to get repair requests summary');
+  }
+
+  const requiredStatuses = ['IN_PROGRESS', 'COMPLETED', 'SUBMITTED'];
+  const statusArray = result;
+
+  const statusMap = statusArray.reduce((acc, item) => {
+    acc[item.currentStatus] = item._count;
+    return acc;
+  }, {});
+
+  const allStatuses = requiredStatuses.reduce((acc, status) => {
+    acc[status] = statusMap[status] ?? 0;
+    return acc;
+  }, {});
+
+  allStatuses['TOTAL'] = allRecords;
+
+  return allStatuses;
+};

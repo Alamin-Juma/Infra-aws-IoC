@@ -1,8 +1,8 @@
 import { ValidationError } from "yup";
 import { AppError, asyncHandler } from "../../middleware/errorHandler.js";
 import sendResponse from "../../middleware/sendResponse.js";
-import { getRepairRequestById, getRepairRequests, createRepairRequestService, deleteRepairRequestsById } from "./repairRequest.service.js"
-import { listRepairRequestsValidationSchema, getRepairRequestByIdValidationSchema, repairRequestSchema, deleteRepairRequestByIdValidationSchema } from "./repairRequest.validator.js";
+import { getRepairRequestById, getRepairRequests, createRepairRequestService, updateRepairRequestDeviceStatusService, deleteRepairRequestsById, updateRepairRequestService, getRepairRequestsSummaryService } from "./repairRequest.service.js"
+import { listRepairRequestsValidationSchema, getRepairRequestByIdValidationSchema, repairRequestSchema, deleteRepairRequestByIdValidationSchema, updateRepairRequestDeviceStatusPathValidationSchema, updateRepairRequestDeviceStatusBodyValidationSchema, updateRepairRequestSchema } from "./repairRequest.validator.js";
 
 export const listRepairRequests = asyncHandler(async (req, res) => {
     try {
@@ -40,3 +40,36 @@ export const deleteRepairRequest = asyncHandler(async (req, res) => {
         const repairRequest = await deleteRepairRequestsById(validated.id,req.user.id)
         return sendResponse(res, 200, "Repair request deleted successfully", { repairRequest })
 })
+
+export const updateRepairRequestDeviceStatus = asyncHandler(async (req, res) => {
+    const validated =
+      await updateRepairRequestDeviceStatusPathValidationSchema.validate(
+        req.params,
+        { stripUnknown: true },
+      );
+      
+    const body = await updateRepairRequestDeviceStatusBodyValidationSchema.validate(
+      req.body,
+      { abortEarly: false },
+    );
+
+    const result = await updateRepairRequestDeviceStatusService({...validated, status: body.status, userId: req.user.id});
+    
+    return sendResponse(
+      res,
+      200,
+      'Repair request device status updated successfully',
+      result, 
+    );
+})
+
+export const updateRepairRequest = asyncHandler(async (req, res) => {
+    await updateRepairRequestSchema.validate(req.body, { abortEarly: false });
+    const repairRequest = await updateRepairRequestService(req, res);
+    return sendResponse(res, 200, "Repair request updated successfully", repairRequest);
+});
+
+export const getRepairRequestsSummary = asyncHandler(async (req, res) => {
+  const summary = await getRepairRequestsSummaryService();
+  return sendResponse(res, 200, "Repair requests summary fetched successfully", summary);
+});

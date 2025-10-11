@@ -24,7 +24,7 @@ export default {
     PATCH: ['MANAGE_USERS'],
   },
   '/roles/create': {
-    POST: ['CREATE_ROLE']
+    POST: ['CREATE_ROLE'],
   },
   '/roles': {
     GET: ['VIEW_ROLES'],
@@ -73,7 +73,7 @@ export default {
     DELETE: ['DELETE_REQUEST_TYPE'],
   },
   '/deviceTypes': {
-    POST: ['CREATE_DEVICE_TYPE']
+    POST: ['CREATE_DEVICE_TYPE'],
   },
   '/deviceTypes/:id': {
     GET: ['VIEW_DEVICE_TYPE'],
@@ -86,9 +86,6 @@ export default {
   },
   '/doc': {
     POST: ['IMPORT_DATA'],
-  },
-  '/forgot-password': {
-    POST: ['RESET_PASSWORD'],
   },
   '/auth': {
     POST: ['AUTHENTICATION_LOGIN'],
@@ -123,10 +120,10 @@ export default {
     POST: ['EMAIL_VENDOR'],
   },
   '/externalRequest': {
-    GET: ['VIEW_EXTERNAL_REQUESTS']
+    GET: ['VIEW_EXTERNAL_REQUESTS'],
   },
   '/externalRequest/statusDecision/:id': {
-    POST: ['APPROVE_EXTERNAL_REQUEST']
+    POST: ['APPROVE_EXTERNAL_REQUEST'],
   },
   '/deviceActivity': {
     GET: ['VIEW_DEVICE_ACTIVITY'],
@@ -140,6 +137,10 @@ export default {
   '/api/procurements-requests': {
     GET: ['VIEW_PROCUREMENT_REQUESTS'],
     POST: ['SUBMIT_PROCUREMENT_REQUEST'],
+  },
+  '/api/procurements-requests/item/:id': {
+    PUT: ['MANAGE_PROCUREMENT_REQUEST'],
+    DELETE: ['DELETE_PROCUREMENT_REQUEST'],
   },
   '/api/vendors': {
     GET: ['VIEW_VENDORS'],
@@ -187,7 +188,7 @@ export default {
     DELETE: ['DELETE_MAINTENANCE_SCHEDULE'],
   },
   '/api/maintenance-schedules/:id/cancel': {
-    PATCH: ['MANAGE_MAINTENANCE_SCHEDULE']
+    PATCH: ['MANAGE_MAINTENANCE_SCHEDULE'],
   },
   '/api/maintenance-schedules/:id/complete': {
     PATCH: ['MANAGE_MAINTENANCE_SCHEDULE'],
@@ -199,5 +200,12 @@ export default {
   '/api/repair-requests/:id': {
     GET: ['VIEW_REPAIR_REQUESTS'],
     DELETE: ['DELETE_REPAIR_REQUEST'],
-  }
+    PATCH: ['UPDATE_REPAIR_REQUEST'],
+  },
+  '/api/repair-requests/:id/devices/:deviceId/status': {
+    PATCH: ['UPDATE_REPAIR_DEVICE_STATUS'],
+  },
+    '/api/repair-requests/summary': {
+    GET: ['VIEW_REPAIR_REQUESTS'],
+  },
 };

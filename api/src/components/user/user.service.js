@@ -83,6 +83,12 @@ const updateUser = async (id, data, user) => {
     throw new Error('User not found');
   }
 
+  if (currentUser.id == user?.id && data?.roleName) {
+    throw new Error(
+      `You cannot update your own role as an ${currentUser.roleName}`,
+    );
+  }
+
   let newStatus = currentUser.status;
   const loginEnabledRoles = config.roles.loginEnabled;  
   const isPromotedToLoginRole = !loginEnabledRoles.includes(currentUser.roleName) && loginEnabledRoles.includes(data.roleName);
@@ -267,12 +273,20 @@ function getAccountActivatedEmailMarkup(setPasswordLink, firstName, logoLink) {
 </html>`;
 }
 
-const deleteUser = async (id) => {
+const deleteUser = async (id, currentUserId) => {
   const user = await prisma.user.findUnique({ where: { id: parseInt(id) } });
 
   if (!user) {
     throw new Error('User not found.');
   }
+
+  if (user.id == currentUserId) {
+    throw new Error(
+      'VALIDATION_ERROR',
+      'You are not allowed to delete your own account.',
+    );
+  }
+
 
   return prisma.user.delete({ where: { id: parseInt(id) } });
 };
@@ -405,6 +419,13 @@ export const toggleUserStatus = async (req) => {
 
   if (!user) {
     throw new AppError('NOT_FOUND', 'User not found.');
+  }
+
+  if(user.id == req.user.id) {
+    throw new AppError(
+      'VALIDATION_ERROR',
+      'You are not allowed to activate or deactivate your own account.',
+    );
   }
 
   try {

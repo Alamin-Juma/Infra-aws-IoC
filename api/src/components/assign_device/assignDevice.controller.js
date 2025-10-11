@@ -27,7 +27,7 @@ export const assignDevice = async (req, res) => {
   
       // Return success response
       res.status(200).json({
-        message: 'Device assigned successfully',
+        message: 'Device unassigned successfully',
         device: result.device,
         activity: result.activity,
       });

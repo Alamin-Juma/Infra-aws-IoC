@@ -42,6 +42,7 @@ describe('User Service', () => {
     it('should update a user', async () => {
         const updatedUser = { id: 1, email: 'updated@example.com', name: 'Updated User' };
         prisma.user.update.mockResolvedValue(updatedUser);
+        prisma.user.findUnique.mockResolvedValue(updatedUser);
 
         const result = await userService.updateUser(1, { email: 'updated@example.com' });
 

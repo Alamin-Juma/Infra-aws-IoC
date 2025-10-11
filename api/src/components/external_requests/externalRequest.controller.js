@@ -127,7 +127,7 @@ export const updateTicketStatus = asyncHandler(async (req, res) => {
   if(action === 'REJECTED' && !reason) return sendResponse(res, 400, 'Rejection reason is required.');
   if(action === 'APPROVED' && (reason && reason.length > 0 )) return sendResponse(res, 400, 'Rejection reason is not required when approving a request.');
 
-  const udpateTicketStatus = await externalRequestService.updateTicketStatus(req, id, action, reason);
+  const updateTicketStatus = await externalRequestService.updateTicketStatus(req, id, action, reason);
   
-  return sendResponse(res, 200, 'Ticket status updated successfully', udpateTicketStatus);
+  return sendResponse(res, 200, 'Ticket status updated successfully', updateTicketStatus);
 });

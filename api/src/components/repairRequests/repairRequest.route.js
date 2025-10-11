@@ -1,5 +1,5 @@
 import express from "express"
-import { createRepairRequest, deleteRepairRequest, getRepairRequestDetails, listRepairRequests } from "./repairRequest.controller.js";
+import { createRepairRequest, deleteRepairRequest, getRepairRequestDetails, listRepairRequests, updateRepairRequestDeviceStatus, updateRepairRequest, getRepairRequestsSummary } from "./repairRequest.controller.js";
 
 const router = express.Router();
 
@@ -65,6 +65,25 @@ router.get('/', listRepairRequests)
 
 /**
  * @swagger
+ * /api/repair-requests/summary:
+ *   get:
+ *     summary: Stats for repair requests
+ *     description: Get summary of repair requests grouped by current status
+ *     tags: [RepairRequests]
+ *     responses:
+ *       200:
+ *         description: Repair requests summary fetched successfully.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/RepairRequests'
+ *       500:
+ *         description: Failed to get repair requests summary
+ */
+router.get('/summary', getRepairRequestsSummary);
+
+/**
+ * @swagger
  * /api/repair-requests/{id}:
  *   get:
  *     summary: Get a repair request by ID
@@ -82,12 +101,51 @@ router.get('/', listRepairRequests)
  *         description: Successfully retrieved repair request.
  *         content:
  *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/RepairRequests'
  *       404:
  *         description: Repair request not found not found.
  */
 router.get('/:id', getRepairRequestDetails)
+
+/**
+ * @swagger
+ * /api/repair-requests:
+ *   post:
+ *     summary: Create a new repair request
+ *     tags: [RepairRequests]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - severity
+ *               - deviceType
+ *               - affectedDevices
+ *             properties:
+ *               description:
+ *                 type: string
+ *                 example: "The screen is cracked and unresponsive."
+ *               severity:
+ *                 type: string
+ *                 enum: [Low, Medium, High]
+ *                 example: "High"
+ *               deviceType:
+ *                 type: integer
+ *                 example: 3
+ *               affectedDevices:
+ *                 type: array
+ *                 items:
+ *                   type: integer
+ *                 example: [1, 2, 3]
+ *     responses:
+ *       201:
+ *         description: Repair request created successfully
+ *       400:
+ *         description: Invalid input data
+ *       500:
+ *         description: Internal server error
+ */
 router.post('/', createRepairRequest);
 
 /**
@@ -115,5 +173,80 @@ router.post('/', createRepairRequest);
  *         description: Repair request not found.
  */
 router.delete('/:id', deleteRepairRequest);
+
+/**
+ * @swagger
+ * /api/repair-requests/summary:
+ *   get:
+ *     summary: Stats for repair requests
+ *     description: Get summary of repair requests grouped by current status
+ *     tags: [RepairRequests]
+ *     responses:
+ *       200:
+ *         description: Repair requests summary fetched successfully.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/RepairRequests'
+ *       500:
+ *         description: Failed to get repair requests summary
+ */
+router.get('/summary', getRepairRequestsSummary);
+
+router.patch('/:id/devices/:deviceId/status', updateRepairRequestDeviceStatus);
+
+
+/**
+ * @swagger
+ * /api/repair-requests/{id}:
+ *   patch:
+ *     summary: Update a repair request
+ *     tags: [RepairRequests]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID of the repair request to update
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               description:
+ *                 type: string
+ *                 example: "The screen is cracked and unresponsive."
+ *               severity:
+ *                 type: string
+ *                 enum: [Low, Medium, High]
+ *                 example: "High"
+ *               deviceType:
+ *                 type: integer
+ *                 example: 3
+ *               location:
+ *                 type: string
+ *                 example: "Amani"
+ *               assignedTo:
+ *                 type: integer
+ *                 example: 2
+ *               affectedDevices:
+ *                 type: array
+ *                 items:
+ *                   type: integer
+ *                 example: [1, 2, 3]
+ *     responses:
+ *       200:
+ *         description: Repair request updated successfully
+ *       400:
+ *         description: Invalid input data
+ *       404:
+ *         description: Repair request not found
+ *       500:
+ *         description: Internal server error
+ */
+router.patch('/:id', updateRepairRequest);
 
 export default router;

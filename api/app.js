@@ -1,3 +1,6 @@
+import dotenv from 'dotenv';
+dotenv.config();
+
 import express from 'express';
 import userRoutes from './src/components/user/user.route.js';
 import roleRoutes from './src/components/role/role.route.js';
@@ -12,7 +15,6 @@ import cors from 'cors';
 import bodyParser from 'body-parser';
 import http from 'http';
 import { Server } from 'socket.io';
-import dotenv from 'dotenv';
 import Health from './src/components/health/health.js';
 import manufacturerRoute from './src/components/manufacturer/manufacturer.route.js';
 import deviceHistoryRoutes from './src/components/deviceHistory/deviceHistoryroute.js';
@@ -51,7 +53,6 @@ import {
   notFoundHandler,
 } from './src/middleware/errorHandler.js';
 
-dotenv.config();
 const app = express();
 const server = http.createServer(app);
 
