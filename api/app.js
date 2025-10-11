@@ -111,69 +111,71 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 app.use(cors());
-app.get('/api/health', (req, res) => {
-  res.status(200).json({ status: 'healthy', timestamp: new Date().toISOString() });
-});
-
-app.get('/health', (req, res) => {
-  res.status(200).json({ status: 'healthy', timestamp: new Date().toISOString() });
-});
-
-app.use(authenticateToken);
-app.use(checkPermissions);
-
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(bodyParser.json({ limit: '50mb' }));
 app.use(bodyParser.urlencoded({ extended: true, limit: '50mb' }));
 app.use(bodyParser.raw({ type: 'application/pdf', limit: '50mb' }));
 
+// Health check endpoint (outside /api for ALB health checks)
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'healthy', timestamp: new Date().toISOString() });
+});
 
-app.use('/users', userRoutes);
-app.use('/roles', roleRoutes);
-app.use('/doc', uploadCSVRoute);
-app.use('/forgot-password', passwordResetRoute);
-app.use('/auth', loginRoutes);
-app.use('/health', Health);
-app.use('/api/health', Health);
-app.use('/api/specifications', deviceSpecRoutes);
-app.use('/deviceTypes', deviceTypeRoute);
-app.use('/manufacturer', manufacturerRoute);
-app.use('/history', deviceHistoryRoutes);
-app.use('/api/devices', deviceRoutes);
-app.use('/api/device-condition', deviceConditionRoutes);
-app.use('/api/device-status', deviceStatusRoute);
-app.use('/assignDevice', assignDeviceRoutes);
-app.use('/email', emailRoutes);
-app.use('/requestTypes', requestTypeRoutes);
-app.use('/externalRequest', externalRequestRoute);
-app.use('/deviceActivity', deviceActivityRoute);
-app.use('/api/reports', historyRoutes);
-app.use('/api/reports', reportRoutes);
-app.use('/api/device-activities', assignmentReport);
-app.use('/api/procurements-requests', procurementRequestsRoutes);
-app.use('/api/vendors', vendorRegisterRoute);
-app.use('/api/reports', historyRoutes);
-app.use('/api/reports', reportRoutes);
-app.use('/api/analytics', dashboardStatsRoutes);
-app.use('/api/device-activities', assignmentReport);
-app.use('/api/quotations', quotationRoutes);
-app.use('/api/procurementRequests', procurementRequestRoutes);
-app.use('/api/vendors', vendorRoutes);
-app.use('/api/vendorDevices', vendorDevices);
-app.use('/api/audit-trail', auditTrails);
-app.use('/api/audit-trail', auditTrails);
-app.use('/api/audit-log', auditLogRoutes)
-app.use('/api/vendorEvaluation', vendorEvaluations);
-app.use('/api/quotation', quotationRoute);
-app.use('/api/purchase-orders', purchaseOrderRoute);
-app.use('/api/quotation', quotationRoute);
-app.use('/api/purchase-orders', purchaseOrderRoute);
-app.use('/api/vendors', contractManagementRoutes);
-app.use('/api/vendor-contracts', contractManagementRoutes);
-app.use('/api/recurrence-patterns', recurrencePattern);
-app.use('/api/maintenance-schedules', maintenanceScheduleRoutes);
-app.use('/api/repair-requests', repairRequestRoutes);
+// Create API router
+const apiRouter = express.Router();
+
+// Health check inside /api
+apiRouter.get('/health', (req, res) => {
+  res.status(200).json({ status: 'healthy', timestamp: new Date().toISOString() });
+});
+
+// Auth routes (no authentication required)
+apiRouter.use('/auth', loginRoutes);
+apiRouter.use('/forgot-password', passwordResetRoute);
+
+// Apply authentication middleware to all routes after this point
+apiRouter.use(authenticateToken);
+apiRouter.use(checkPermissions);
+
+// Protected routes
+apiRouter.use('/users', userRoutes);
+apiRouter.use('/roles', roleRoutes);
+apiRouter.use('/doc', uploadCSVRoute);
+apiRouter.use('/specifications', deviceSpecRoutes);
+apiRouter.use('/deviceTypes', deviceTypeRoute);
+apiRouter.use('/manufacturer', manufacturerRoute);
+apiRouter.use('/history', deviceHistoryRoutes);
+apiRouter.use('/devices', deviceRoutes);
+apiRouter.use('/device-condition', deviceConditionRoutes);
+apiRouter.use('/device-status', deviceStatusRoute);
+apiRouter.use('/assignDevice', assignDeviceRoutes);
+apiRouter.use('/email', emailRoutes);
+apiRouter.use('/requestTypes', requestTypeRoutes);
+apiRouter.use('/externalRequest', externalRequestRoute);
+apiRouter.use('/deviceActivity', deviceActivityRoute);
+apiRouter.use('/reports', historyRoutes);
+apiRouter.use('/reports', reportRoutes);
+apiRouter.use('/device-activities', assignmentReport);
+apiRouter.use('/procurements-requests', procurementRequestsRoutes);
+apiRouter.use('/vendors', vendorRegisterRoute);
+apiRouter.use('/analytics', dashboardStatsRoutes);
+apiRouter.use('/quotations', quotationRoutes);
+apiRouter.use('/procurementRequests', procurementRequestRoutes);
+apiRouter.use('/vendors', vendorRoutes);
+apiRouter.use('/vendorDevices', vendorDevices);
+apiRouter.use('/audit-trail', auditTrails);
+apiRouter.use('/audit-log', auditLogRoutes);
+apiRouter.use('/vendorEvaluation', vendorEvaluations);
+apiRouter.use('/quotation', quotationRoute);
+apiRouter.use('/purchase-orders', purchaseOrderRoute);
+apiRouter.use('/vendor-contracts', contractManagementRoutes);
+apiRouter.use('/recurrence-patterns', recurrencePattern);
+apiRouter.use('/maintenance-schedules', maintenanceScheduleRoutes);
+apiRouter.use('/repair-requests', repairRequestRoutes);
+
+// Mount all API routes under /api
+app.use('/api', apiRouter);
 
 
 app.use(notFoundHandler);
