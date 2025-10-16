@@ -166,9 +166,10 @@ jobs:
           cd terraform
           echo "📋 Getting Terraform outputs..."
           
-          CLUSTER_NAME=$(terraform output -raw cluster_name || echo "${{ env.ECS_CLUSTER }}")
-          BACKEND_SERVICE=$(terraform output -raw backend_service_name || echo "${{ env.ECS_BACKEND_SERVICE }}")
-          FRONTEND_SERVICE=$(terraform output -raw frontend_service_name || echo "${{ env.ECS_FRONTEND_SERVICE }}")
+          # Try to get outputs, use defaults if they don't exist
+          CLUSTER_NAME=$(terraform output -raw cluster_name 2>/dev/null || echo "prodready-infra-cluster-staging")
+          BACKEND_SERVICE=$(terraform output -raw backend_service_name 2>/dev/null || echo "prodready-infra-backend-service-staging")
+          FRONTEND_SERVICE=$(terraform output -raw frontend_service_name 2>/dev/null || echo "prodready-infra-frontend-service-staging")
           
           echo "cluster_name=$CLUSTER_NAME" >> $GITHUB_OUTPUT
           echo "backend_service=$BACKEND_SERVICE" >> $GITHUB_OUTPUT
@@ -177,6 +178,7 @@ jobs:
           echo "Cluster: $CLUSTER_NAME"
           echo "Backend Service: $BACKEND_SERVICE"
           echo "Frontend Service: $FRONTEND_SERVICE"
+        continue-on-error: false
 
       - name: Update Backend Task Definition
         id: backend_task_def
