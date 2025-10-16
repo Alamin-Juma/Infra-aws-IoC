@@ -15,6 +15,7 @@ env:
   ECS_CLUSTER: prodready-infra-cluster-staging
   ECS_BACKEND_SERVICE: prodready-infra-backend-service-staging
   ECS_FRONTEND_SERVICE: prodready-infra-frontend-service-staging
+  ENVIRONMENT: staging  # Add this line
 
 jobs:
   terraform-plan:
@@ -149,20 +150,33 @@ jobs:
           echo "image_tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
           echo "image_uri=$ECR_REGISTRY/$FRONTEND_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
 
-      # Add these new steps after "Terraform Apply" and before "Update ECS Services"
       
       - name: Update Backend Task Definition
         id: backend_task_def
         run: |
           echo "📝 Updating backend task definition with new image..."
           
+          # Get the correct task definition family name from Terraform output or construct it
+          TASK_FAMILY="${{ env.ECS_CLUSTER }%-cluster-*}-backend-task-${{ env.ENVIRONMENT }}"
+          # Simpler: just use the expected naming convention
+          TASK_FAMILY="prodready-infra-backend-task-staging"
+          
+          echo "Looking for task definition family: $TASK_FAMILY"
+          
           # Get current task definition
           TASK_DEF=$(aws ecs describe-task-definition \
-            --task-definition prodready-infra-backend-task-staging \
-            --region ${{ env.AWS_REGION }})
+            --task-definition "$TASK_FAMILY" \
+            --region ${{ env.AWS_REGION }} 2>&1)
+          
+          if [ $? -ne 0 ]; then
+            echo "❌ Failed to get task definition: $TASK_DEF"
+            echo "Available task definitions:"
+            aws ecs list-task-definitions --region ${{ env.AWS_REGION }} | grep backend
+            exit 1
+          fi
           
           # Create new task definition with updated image
-          NEW_TASK_DEF=$(echo $TASK_DEF | jq --arg IMAGE "${{ steps.backend_image.outputs.image_uri }}" '
+          NEW_TASK_DEF=$(echo "$TASK_DEF" | jq --arg IMAGE "${{ steps.backend_image.outputs.image_uri }}" '
             .taskDefinition |
             .containerDefinitions[0].image = $IMAGE |
             del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)
@@ -173,22 +187,33 @@ jobs:
             --cli-input-json "$NEW_TASK_DEF" \
             --region ${{ env.AWS_REGION }})
           
-          NEW_REVISION=$(echo $NEW_TASK_INFO | jq -r '.taskDefinition.revision')
+          NEW_REVISION=$(echo "$NEW_TASK_INFO" | jq -r '.taskDefinition.revision')
           echo "✅ New backend task definition revision: $NEW_REVISION"
           echo "revision=$NEW_REVISION" >> $GITHUB_OUTPUT
+          echo "family=$TASK_FAMILY" >> $GITHUB_OUTPUT
 
       - name: Update Frontend Task Definition
         id: frontend_task_def
         run: |
           echo "📝 Updating frontend task definition with new image..."
           
+          TASK_FAMILY="prodready-infra-frontend-task-staging"
+          echo "Looking for task definition family: $TASK_FAMILY"
+          
           # Get current task definition
           TASK_DEF=$(aws ecs describe-task-definition \
-            --task-definition prodready-infra-frontend-task-staging \
-            --region ${{ env.AWS_REGION }})
+            --task-definition "$TASK_FAMILY" \
+            --region ${{ env.AWS_REGION }} 2>&1)
+          
+          if [ $? -ne 0 ]; then
+            echo "❌ Failed to get task definition: $TASK_DEF"
+            echo "Available task definitions:"
+            aws ecs list-task-definitions --region ${{ env.AWS_REGION }} | grep frontend
+            exit 1
+          fi
           
           # Create new task definition with updated image
-          NEW_TASK_DEF=$(echo $TASK_DEF | jq --arg IMAGE "${{ steps.frontend_image.outputs.image_uri }}" '
+          NEW_TASK_DEF=$(echo "$TASK_DEF" | jq --arg IMAGE "${{ steps.frontend_image.outputs.image_uri }}" '
             .taskDefinition |
             .containerDefinitions[0].image = $IMAGE |
             del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)
@@ -199,27 +224,30 @@ jobs:
             --cli-input-json "$NEW_TASK_DEF" \
             --region ${{ env.AWS_REGION }})
           
-          NEW_REVISION=$(echo $NEW_TASK_INFO | jq -r '.taskDefinition.revision')
+          NEW_REVISION=$(echo "$NEW_TASK_INFO" | jq -r '.taskDefinition.revision')
           echo "✅ New frontend task definition revision: $NEW_REVISION"
           echo "revision=$NEW_REVISION" >> $GITHUB_OUTPUT
+          echo "family=$TASK_FAMILY" >> $GITHUB_OUTPUT
 
       - name: Update ECS Services
         run: |
           echo "🔄 Updating ECS services with new task definitions..."
           
           # Update backend service with new task definition
+          echo "Updating backend service..."
           aws ecs update-service \
-            --cluster $ECS_CLUSTER \
-            --service $ECS_BACKEND_SERVICE \
-            --task-definition prodready-infra-backend-task-staging:${{ steps.backend_task_def.outputs.revision }} \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --service ${{ env.ECS_BACKEND_SERVICE }} \
+            --task-definition "${{ steps.backend_task_def.outputs.family }}:${{ steps.backend_task_def.outputs.revision }}" \
             --force-new-deployment \
             --region ${{ env.AWS_REGION }}
           
           # Update frontend service with new task definition
+          echo "Updating frontend service..."
           aws ecs update-service \
-            --cluster $ECS_CLUSTER \
-            --service $ECS_FRONTEND_SERVICE \
-            --task-definition prodready-infra-frontend-task-staging:${{ steps.frontend_task_def.outputs.revision }} \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --service ${{ env.ECS_FRONTEND_SERVICE }} \
+            --task-definition "${{ steps.frontend_task_def.outputs.family }}:${{ steps.frontend_task_def.outputs.revision }}" \
             --force-new-deployment \
             --region ${{ env.AWS_REGION }}
           
@@ -229,55 +257,82 @@ jobs:
         run: |
           echo "⏳ Waiting for services to stabilize..."
           
-          # Wait for backend
+          # Wait for backend (with timeout)
           echo "Waiting for backend service..."
-          aws ecs wait services-stable \
-            --cluster $ECS_CLUSTER \
-            --services $ECS_BACKEND_SERVICE \
-            --region ${{ env.AWS_REGION }} && echo "✅ Backend stable"
+          timeout 600 aws ecs wait services-stable \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --services ${{ env.ECS_BACKEND_SERVICE }} \
+            --region ${{ env.AWS_REGION }} && echo "✅ Backend stable" || echo "⚠️ Backend wait timeout"
 
-          # Wait for frontend
+          # Wait for frontend (with timeout)
           echo "Waiting for frontend service..."
-          aws ecs wait services-stable \
-            --cluster $ECS_CLUSTER \
-            --services $ECS_FRONTEND_SERVICE \
-            --region ${{ env.AWS_REGION }} && echo "✅ Frontend stable"
+          timeout 600 aws ecs wait services-stable \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --services ${{ env.ECS_FRONTEND_SERVICE }} \
+            --region ${{ env.AWS_REGION }} && echo "✅ Frontend stable" || echo "⚠️ Frontend wait timeout"
           
           # Verify running tasks are using new task definitions
           echo ""
           echo "📋 Verifying task definitions..."
+          
+          # Backend verification
           BACKEND_TASKS=$(aws ecs list-tasks \
-            --cluster $ECS_CLUSTER \
-            --service-name $ECS_BACKEND_SERVICE \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --service-name ${{ env.ECS_BACKEND_SERVICE }} \
+            --desired-status RUNNING \
             --query 'taskArns[0]' \
             --output text \
             --region ${{ env.AWS_REGION }})
           
-          if [ "$BACKEND_TASKS" != "None" ]; then
+          if [ "$BACKEND_TASKS" != "None" ] && [ -n "$BACKEND_TASKS" ]; then
             BACKEND_TASK_DEF=$(aws ecs describe-tasks \
-              --cluster $ECS_CLUSTER \
+              --cluster ${{ env.ECS_CLUSTER }} \
               --tasks $BACKEND_TASKS \
               --query 'tasks[0].taskDefinitionArn' \
               --output text \
               --region ${{ env.AWS_REGION }})
             echo "Backend running task definition: $BACKEND_TASK_DEF"
+            
+            BACKEND_IMAGE=$(aws ecs describe-tasks \
+              --cluster ${{ env.ECS_CLUSTER }} \
+              --tasks $BACKEND_TASKS \
+              --query 'tasks[0].containers[0].image' \
+              --output text \
+              --region ${{ env.AWS_REGION }})
+            echo "Backend container image: $BACKEND_IMAGE"
+            echo "Expected: ${{ steps.backend_image.outputs.image_uri }}"
+          else
+            echo "⚠️ No running backend tasks found"
           fi
           
+          # Frontend verification
           FRONTEND_TASKS=$(aws ecs list-tasks \
-            --cluster $ECS_CLUSTER \
-            --service-name $ECS_FRONTEND_SERVICE \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --service-name ${{ env.ECS_FRONTEND_SERVICE }} \
+            --desired-status RUNNING \
             --query 'taskArns[0]' \
             --output text \
             --region ${{ env.AWS_REGION }})
           
-          if [ "$FRONTEND_TASKS" != "None" ]; then
+          if [ "$FRONTEND_TASKS" != "None" ] && [ -n "$FRONTEND_TASKS" ]; then
             FRONTEND_TASK_DEF=$(aws ecs describe-tasks \
-              --cluster $ECS_CLUSTER \
+              --cluster ${{ env.ECS_CLUSTER }} \
               --tasks $FRONTEND_TASKS \
               --query 'tasks[0].taskDefinitionArn' \
               --output text \
               --region ${{ env.AWS_REGION }})
             echo "Frontend running task definition: $FRONTEND_TASK_DEF"
+            
+            FRONTEND_IMAGE=$(aws ecs describe-tasks \
+              --cluster ${{ env.ECS_CLUSTER }} \
+              --tasks $FRONTEND_TASKS \
+              --query 'tasks[0].containers[0].image' \
+              --output text \
+              --region ${{ env.AWS_REGION }})
+            echo "Frontend container image: $FRONTEND_IMAGE"
+            echo "Expected: ${{ steps.frontend_image.outputs.image_uri }}"
+          else
+            echo "⚠️ No running frontend tasks found"
           fi
 
       - name: Verify Container Images

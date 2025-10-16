@@ -99,8 +99,6 @@ resource "aws_cloudwatch_log_group" "backend" {
   count = var.cloudwatch_logs ? 1 : 0
   name  = "/ecs/${var.project_name}-backend-${var.environment}"
   
-  # retention_in_days = 30  # Disabled due to permission restrictions
-  
   tags = {
     Name        = "${var.project_name}-backend-logs"
     Environment = var.environment
@@ -110,8 +108,6 @@ resource "aws_cloudwatch_log_group" "backend" {
 resource "aws_cloudwatch_log_group" "frontend" {
   count = var.cloudwatch_logs ? 1 : 0
   name  = "/ecs/${var.project_name}-frontend-${var.environment}"
-  
-  # retention_in_days = 30  # Disabled due to permission restrictions
   
   tags = {
     Name        = "${var.project_name}-frontend-logs"
@@ -203,44 +199,6 @@ resource "aws_iam_role_policy_attachment" "task_dynamodb_policy" {
   policy_arn = aws_iam_policy.dynamodb_policy.arn
 }
 
-# Additional permissions for task role (disabled due to IAM permissions)
-# resource "aws_iam_policy" "task_policy" {
-#   name        = "${var.project_name}-task-policy-${var.environment}"
-#   description = "Policy for ECS tasks"
-#   
-#   policy = jsonencode({
-#     Version = "2012-10-17"
-#     Statement = [
-#       {
-#         Effect = "Allow"
-#         Action = [
-#           "ssm:GetParameters",
-#           "ssm:GetParameter",
-#           "ssm:GetParametersByPath"
-#         ]
-#         Resource = [
-#           "arn:aws:ssm:*:*:parameter/${var.project_name}/${var.environment}/*"
-#         ]
-#       },
-#       {
-#         Effect = "Allow"
-#         Action = [
-#           "cognito-idp:AdminInitiateAuth",
-#           "cognito-idp:AdminCreateUser"
-#         ]
-#         Resource = [
-#           "arn:aws:cognito-idp:*:*:userpool/*"
-#         ]
-#       }
-#     ]
-#   })
-# }
-
-# resource "aws_iam_role_policy_attachment" "task_role_policy" {
-#   role       = aws_iam_role.task_role.name
-#   policy_arn = aws_iam_policy.task_policy.arn
-# }
-
 # Application Load Balancer
 resource "aws_lb" "main" {
   name               = "${var.project_name}-alb-${var.environment}"
@@ -274,6 +232,8 @@ resource "aws_lb_target_group" "backend" {
     matcher             = "200-299"
   }
   
+  deregistration_delay = 30
+  
   tags = {
     Name        = "${var.project_name}-backend-tg"
     Environment = var.environment
@@ -295,6 +255,8 @@ resource "aws_lb_target_group" "frontend" {
     unhealthy_threshold = 3
     matcher             = "200-299"
   }
+  
+  deregistration_delay = 30
   
   tags = {
     Name        = "${var.project_name}-frontend-tg"
@@ -332,7 +294,7 @@ resource "aws_lb_listener_rule" "backend" {
 
 # Backend Task Definition
 resource "aws_ecs_task_definition" "backend" {
-  family                   = "${var.project_name}-backend-${var.environment}"
+  family                   = "${var.project_name}-backend-task-${var.environment}"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
   cpu                      = var.cpu
@@ -343,7 +305,7 @@ resource "aws_ecs_task_definition" "backend" {
   container_definitions = jsonencode([
     {
       name      = "${var.project_name}-backend"
-      image     = var.backend_image
+      image     = "${var.backend_image}:latest"
       essential = true
       
       portMappings = [
@@ -400,7 +362,7 @@ resource "aws_ecs_task_definition" "backend" {
 
 # Frontend Task Definition
 resource "aws_ecs_task_definition" "frontend" {
-  family                   = "${var.project_name}-frontend-${var.environment}"
+  family                   = "${var.project_name}-frontend-task-${var.environment}"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
   cpu                      = var.cpu
@@ -411,7 +373,7 @@ resource "aws_ecs_task_definition" "frontend" {
   container_definitions = jsonencode([
     {
       name      = "${var.project_name}-frontend"
-      image     = var.frontend_image
+      image     = "${var.frontend_image}:latest"
       essential = true
       
       portMappings = [
@@ -429,7 +391,7 @@ resource "aws_ecs_task_definition" "frontend" {
         },
         {
           name  = "REACT_APP_API_URL"
-          value = "https://api.example.com"
+          value = "http://${aws_lb.main.dns_name}/api"
         }
       ]
       
@@ -466,6 +428,12 @@ resource "aws_ecs_service" "backend" {
   desired_count                      = var.desired_count
   launch_type                        = "FARGATE"
   health_check_grace_period_seconds  = 120
+  force_new_deployment               = true
+  
+  deployment_configuration {
+    maximum_percent         = 200
+    minimum_healthy_percent = 100
+  }
   
   network_configuration {
     subnets          = var.public_subnet_ids
@@ -489,6 +457,10 @@ resource "aws_ecs_service" "backend" {
   }
   
   depends_on = [aws_lb_listener_rule.backend]
+  
+  lifecycle {
+    ignore_changes = [desired_count]
+  }
 }
 
 # Frontend Service
@@ -499,6 +471,12 @@ resource "aws_ecs_service" "frontend" {
   desired_count                      = var.desired_count
   launch_type                        = "FARGATE"
   health_check_grace_period_seconds  = 120
+  force_new_deployment               = true
+  
+  deployment_configuration {
+    maximum_percent         = 200
+    minimum_healthy_percent = 100
+  }
   
   network_configuration {
     subnets          = var.public_subnet_ids
@@ -522,6 +500,10 @@ resource "aws_ecs_service" "frontend" {
   }
   
   depends_on = [aws_lb_listener.http]
+  
+  lifecycle {
+    ignore_changes = [desired_count]
+  }
 }
 
 # Auto Scaling for Backend
@@ -584,6 +566,21 @@ output "cluster_name" {
   value       = aws_ecs_cluster.main.name
 }
 
+output "cluster_id" {
+  description = "ID of the ECS cluster"
+  value       = aws_ecs_cluster.main.id
+}
+
+output "backend_service_name" {
+  description = "Name of the backend ECS service"
+  value       = aws_ecs_service.backend.name
+}
+
+output "frontend_service_name" {
+  description = "Name of the frontend ECS service"
+  value       = aws_ecs_service.frontend.name
+}
+
 output "service_names" {
   description = "Names of the ECS services"
   value       = [aws_ecs_service.backend.name, aws_ecs_service.frontend.name]
@@ -594,6 +591,11 @@ output "lb_dns_name" {
   value       = aws_lb.main.dns_name
 }
 
+output "lb_arn" {
+  description = "ARN of the load balancer"
+  value       = aws_lb.main.arn
+}
+
 output "backend_target_group_arn" {
   description = "ARN of the backend target group"
   value       = aws_lb_target_group.backend.arn
@@ -602,4 +604,14 @@ output "backend_target_group_arn" {
 output "frontend_target_group_arn" {
   description = "ARN of the frontend target group"
   value       = aws_lb_target_group.frontend.arn
+}
+
+output "backend_task_definition_family" {
+  description = "Family name of the backend task definition"
+  value       = aws_ecs_task_definition.backend.family
+}
+
+output "frontend_task_definition_family" {
+  description = "Family name of the frontend task definition"
+  value       = aws_ecs_task_definition.frontend.family
 }
