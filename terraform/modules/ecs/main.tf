@@ -430,10 +430,8 @@ resource "aws_ecs_service" "backend" {
   health_check_grace_period_seconds  = 120
   force_new_deployment               = true
   
-  deployment_configuration {
-    maximum_percent         = 200
-    minimum_healthy_percent = 100
-  }
+  deployment_maximum_percent         = 200
+  deployment_minimum_healthy_percent = 100
   
   network_configuration {
     subnets          = var.public_subnet_ids
@@ -445,10 +443,6 @@ resource "aws_ecs_service" "backend" {
     target_group_arn = aws_lb_target_group.backend.arn
     container_name   = "${var.project_name}-backend"
     container_port   = var.container_port
-  }
-  
-  deployment_controller {
-    type = "ECS"
   }
   
   tags = {
@@ -473,10 +467,8 @@ resource "aws_ecs_service" "frontend" {
   health_check_grace_period_seconds  = 120
   force_new_deployment               = true
   
-  deployment_configuration {
-    maximum_percent         = 200
-    minimum_healthy_percent = 100
-  }
+  deployment_maximum_percent         = 200
+  deployment_minimum_healthy_percent = 100
   
   network_configuration {
     subnets          = var.public_subnet_ids
@@ -488,10 +480,6 @@ resource "aws_ecs_service" "frontend" {
     target_group_arn = aws_lb_target_group.frontend.arn
     container_name   = "${var.project_name}-frontend"
     container_port   = 80
-  }
-  
-  deployment_controller {
-    type = "ECS"
   }
   
   tags = {
