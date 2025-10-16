@@ -266,3 +266,60 @@ module "backup" {
   
   depends_on = [module.rds, module.dynamodb]
 }
+
+# Outputs - Add these at the end
+output "cluster_name" {
+  description = "Name of the ECS cluster"
+  value       = module.ecs.cluster_name
+}
+
+output "cluster_id" {
+  description = "ID of the ECS cluster"
+  value       = module.ecs.cluster_id
+}
+
+output "backend_service_name" {
+  description = "Name of the backend ECS service"
+  value       = module.ecs.backend_service_name
+}
+
+output "frontend_service_name" {
+  description = "Name of the frontend ECS service"
+  value       = module.ecs.frontend_service_name
+}
+
+output "lb_dns_name" {
+  description = "DNS name of the load balancer"
+  value       = module.ecs.lb_dns_name
+}
+
+output "lb_arn" {
+  description = "ARN of the load balancer"
+  value       = module.ecs.lb_arn
+}
+
+output "vpc_id" {
+  description = "VPC ID"
+  value       = module.vpc.vpc_id
+}
+
+output "ecr_backend_repository_url" {
+  description = "ECR repository URL for backend"
+  value       = module.ecr.repository_urls["${var.project_name}-api"]
+}
+
+output "ecr_frontend_repository_url" {
+  description = "ECR repository URL for frontend"
+  value       = module.ecr.repository_urls["${var.project_name}-ui"]
+}
+
+output "cloudfront_domain_name" {
+  description = "CloudFront distribution domain name"
+  value       = module.cloudfront.domain_name
+}
+
+output "rds_endpoint" {
+  description = "RDS database endpoint"
+  value       = module.rds.db_instance_endpoint
+  sensitive   = true
+}
