@@ -156,9 +156,7 @@ jobs:
         run: |
           echo "📝 Updating backend task definition with new image..."
           
-          # Get the correct task definition family name from Terraform output or construct it
-          TASK_FAMILY="${{ env.ECS_CLUSTER }%-cluster-*}-backend-task-${{ env.ENVIRONMENT }}"
-          # Simpler: just use the expected naming convention
+          # Use the expected naming convention directly
           TASK_FAMILY="prodready-infra-backend-task-staging"
           
           echo "Looking for task definition family: $TASK_FAMILY"
