@@ -114,105 +114,200 @@ jobs:
           TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
 
       - name: Build and push Backend image
+        id: backend_image
         run: |
           cd api
           echo "🏗️ Building backend image..."
-          docker build -t $ECR_REGISTRY/$BACKEND_REPOSITORY:$GITHUB_SHA .
+          IMAGE_TAG="${GITHUB_SHA:0:7}-$(date +%s)"
+          docker build -t $ECR_REGISTRY/$BACKEND_REPOSITORY:$IMAGE_TAG .
           docker build -t $ECR_REGISTRY/$BACKEND_REPOSITORY:latest .
           
           echo "📤 Pushing backend image..."
-          docker push $ECR_REGISTRY/$BACKEND_REPOSITORY:$GITHUB_SHA
+          docker push $ECR_REGISTRY/$BACKEND_REPOSITORY:$IMAGE_TAG
           docker push $ECR_REGISTRY/$BACKEND_REPOSITORY:latest
           echo "✅ Backend image pushed"
+          
+          # Output for next steps
+          echo "image_tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
+          echo "image_uri=$ECR_REGISTRY/$BACKEND_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
 
       - name: Build and push Frontend image
+        id: frontend_image
         run: |
           cd ui
           echo "🏗️ Building frontend image..."
-          docker build -t $ECR_REGISTRY/$FRONTEND_REPOSITORY:$GITHUB_SHA .
+          IMAGE_TAG="${GITHUB_SHA:0:7}-$(date +%s)"
+          docker build -t $ECR_REGISTRY/$FRONTEND_REPOSITORY:$IMAGE_TAG .
           docker build -t $ECR_REGISTRY/$FRONTEND_REPOSITORY:latest .
           
           echo "📤 Pushing frontend image..."
-          docker push $ECR_REGISTRY/$FRONTEND_REPOSITORY:$GITHUB_SHA
+          docker push $ECR_REGISTRY/$FRONTEND_REPOSITORY:$IMAGE_TAG
           docker push $ECR_REGISTRY/$FRONTEND_REPOSITORY:latest
           echo "✅ Frontend image pushed"
+          
+          # Output for next steps
+          echo "image_tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
+          echo "image_uri=$ECR_REGISTRY/$FRONTEND_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
 
-      - name: Terraform Apply
-        id: apply
+      # Add these new steps after "Terraform Apply" and before "Update ECS Services"
+      
+      - name: Update Backend Task Definition
+        id: backend_task_def
         run: |
-          cd terraform
-          echo "🚀 Applying Terraform changes..."
+          echo "📝 Updating backend task definition with new image..."
           
-          terraform force-unlock -force fb45a5bc-a2cf-323f-e57b-0432c53495cf 2>/dev/null || echo "No lock to clear"
-          terraform refresh -var-file="environments/staging.tfvars" >/dev/null 2>&1 || true
+          # Get current task definition
+          TASK_DEF=$(aws ecs describe-task-definition \
+            --task-definition prodready-infra-backend-task-staging \
+            --region ${{ env.AWS_REGION }})
           
-          echo "Applying changes..."
-          terraform apply -auto-approve -var-file="environments/staging.tfvars" 2>&1 | tee /tmp/apply_output.log
-          APPLY_EXIT=${PIPESTATUS[0]}
+          # Create new task definition with updated image
+          NEW_TASK_DEF=$(echo $TASK_DEF | jq --arg IMAGE "${{ steps.backend_image.outputs.image_uri }}" '
+            .taskDefinition |
+            .containerDefinitions[0].image = $IMAGE |
+            del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)
+          ')
           
-          if [ $APPLY_EXIT -ne 0 ]; then
-            if grep -q "RepositoryAlreadyExistsException" /tmp/apply_output.log; then
-              echo "❌ ECR repository already exists error detected!"
-              echo "🔄 Attempting to import and re-apply..."
-              
-              for REPO in "$BACKEND_REPOSITORY" "$FRONTEND_REPOSITORY"; do
-                RESOURCE_PATH="module.ecr.aws_ecr_repository.repos[\"$REPO\"]"
-                if aws ecr describe-repositories --repository-names "$REPO" --region $AWS_REGION >/dev/null 2>&1; then
-                  if ! terraform state list 2>/dev/null | grep -qF "$RESOURCE_PATH"; then
-                    echo "📥 Importing $REPO to Terraform state..."
-                    terraform import "$RESOURCE_PATH" "$REPO" || echo "Import failed for $REPO"
-                  fi
-                fi
-              done
-              
-              terraform refresh -var-file="environments/staging.tfvars" >/dev/null 2>&1 || true
-              echo "🔄 Retrying apply..."
-              terraform apply -auto-approve -var-file="environments/staging.tfvars" 2>&1 | tee /tmp/retry_apply_output.log
-              RETRY_EXIT=${PIPESTATUS[0]}
-              
-              if [ $RETRY_EXIT -ne 0 ]; then
-                echo "❌ Retry failed!"
-                cat /tmp/retry_apply_output.log
-                exit 1
-              fi
-            else
-              cat /tmp/apply_output.log
-              exit $APPLY_EXIT
-            fi
-          fi
+          # Register new task definition
+          NEW_TASK_INFO=$(aws ecs register-task-definition \
+            --cli-input-json "$NEW_TASK_DEF" \
+            --region ${{ env.AWS_REGION }})
           
-          echo "✅ Infrastructure deployment complete"
-        env:
-          TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
+          NEW_REVISION=$(echo $NEW_TASK_INFO | jq -r '.taskDefinition.revision')
+          echo "✅ New backend task definition revision: $NEW_REVISION"
+          echo "revision=$NEW_REVISION" >> $GITHUB_OUTPUT
+
+      - name: Update Frontend Task Definition
+        id: frontend_task_def
+        run: |
+          echo "📝 Updating frontend task definition with new image..."
+          
+          # Get current task definition
+          TASK_DEF=$(aws ecs describe-task-definition \
+            --task-definition prodready-infra-frontend-task-staging \
+            --region ${{ env.AWS_REGION }})
+          
+          # Create new task definition with updated image
+          NEW_TASK_DEF=$(echo $TASK_DEF | jq --arg IMAGE "${{ steps.frontend_image.outputs.image_uri }}" '
+            .taskDefinition |
+            .containerDefinitions[0].image = $IMAGE |
+            del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)
+          ')
+          
+          # Register new task definition
+          NEW_TASK_INFO=$(aws ecs register-task-definition \
+            --cli-input-json "$NEW_TASK_DEF" \
+            --region ${{ env.AWS_REGION }})
+          
+          NEW_REVISION=$(echo $NEW_TASK_INFO | jq -r '.taskDefinition.revision')
+          echo "✅ New frontend task definition revision: $NEW_REVISION"
+          echo "revision=$NEW_REVISION" >> $GITHUB_OUTPUT
 
       - name: Update ECS Services
         run: |
-          echo "🔄 Updating ECS services..."
+          echo "🔄 Updating ECS services with new task definitions..."
+          
+          # Update backend service with new task definition
           aws ecs update-service \
             --cluster $ECS_CLUSTER \
             --service $ECS_BACKEND_SERVICE \
+            --task-definition prodready-infra-backend-task-staging:${{ steps.backend_task_def.outputs.revision }} \
             --force-new-deployment \
             --region ${{ env.AWS_REGION }}
           
+          # Update frontend service with new task definition
           aws ecs update-service \
             --cluster $ECS_CLUSTER \
             --service $ECS_FRONTEND_SERVICE \
+            --task-definition prodready-infra-frontend-task-staging:${{ steps.frontend_task_def.outputs.revision }} \
             --force-new-deployment \
             --region ${{ env.AWS_REGION }}
-          echo "✅ ECS updates initiated"
+          
+          echo "✅ ECS services updated with new task definitions"
 
       - name: Wait for Deployment
         run: |
           echo "⏳ Waiting for services to stabilize..."
+          
+          # Wait for backend
+          echo "Waiting for backend service..."
           aws ecs wait services-stable \
             --cluster $ECS_CLUSTER \
             --services $ECS_BACKEND_SERVICE \
             --region ${{ env.AWS_REGION }} && echo "✅ Backend stable"
 
+          # Wait for frontend
+          echo "Waiting for frontend service..."
           aws ecs wait services-stable \
             --cluster $ECS_CLUSTER \
             --services $ECS_FRONTEND_SERVICE \
             --region ${{ env.AWS_REGION }} && echo "✅ Frontend stable"
+          
+          # Verify running tasks are using new task definitions
+          echo ""
+          echo "📋 Verifying task definitions..."
+          BACKEND_TASKS=$(aws ecs list-tasks \
+            --cluster $ECS_CLUSTER \
+            --service-name $ECS_BACKEND_SERVICE \
+            --query 'taskArns[0]' \
+            --output text \
+            --region ${{ env.AWS_REGION }})
+          
+          if [ "$BACKEND_TASKS" != "None" ]; then
+            BACKEND_TASK_DEF=$(aws ecs describe-tasks \
+              --cluster $ECS_CLUSTER \
+              --tasks $BACKEND_TASKS \
+              --query 'tasks[0].taskDefinitionArn' \
+              --output text \
+              --region ${{ env.AWS_REGION }})
+            echo "Backend running task definition: $BACKEND_TASK_DEF"
+          fi
+          
+          FRONTEND_TASKS=$(aws ecs list-tasks \
+            --cluster $ECS_CLUSTER \
+            --service-name $ECS_FRONTEND_SERVICE \
+            --query 'taskArns[0]' \
+            --output text \
+            --region ${{ env.AWS_REGION }})
+          
+          if [ "$FRONTEND_TASKS" != "None" ]; then
+            FRONTEND_TASK_DEF=$(aws ecs describe-tasks \
+              --cluster $ECS_CLUSTER \
+              --tasks $FRONTEND_TASKS \
+              --query 'tasks[0].taskDefinitionArn' \
+              --output text \
+              --region ${{ env.AWS_REGION }})
+            echo "Frontend running task definition: $FRONTEND_TASK_DEF"
+          fi
+
+      - name: Verify Container Images
+        run: |
+          echo "🔍 Verifying container images in running tasks..."
+          
+          # Check backend container image
+          BACKEND_TASKS=$(aws ecs list-tasks \
+            --cluster $ECS_CLUSTER \
+            --service-name $ECS_BACKEND_SERVICE \
+            --query 'taskArns[0]' \
+            --output text \
+            --region ${{ env.AWS_REGION }})
+          
+          if [ "$BACKEND_TASKS" != "None" ]; then
+            BACKEND_IMAGE=$(aws ecs describe-tasks \
+              --cluster $ECS_CLUSTER \
+              --tasks $BACKEND_TASKS \
+              --query 'tasks[0].containers[0].image' \
+              --output text \
+              --region ${{ env.AWS_REGION }})
+            echo "Backend container image: $BACKEND_IMAGE"
+            echo "Expected: ${{ steps.backend_image.outputs.image_uri }}"
+            
+            if [ "$BACKEND_IMAGE" != "${{ steps.backend_image.outputs.image_uri }}" ]; then
+              echo "⚠️ WARNING: Backend image mismatch!"
+            else
+              echo "✅ Backend image verified"
+            fi
+          fi
 
       - name: Health Check
         run: |
@@ -222,34 +317,93 @@ jobs:
 
           echo "🌐 Checking API health endpoint..."
           success=false
-          for i in {1..20}; do
-            echo "Attempt $i/20: Checking $HEALTH_URL"
-            if curl -fsSL -m 10 -k "$HEALTH_URL" > /dev/null; then
-              echo "✅ Health check passed at $HEALTH_URL"
+          for i in {1..30}; do
+            echo "Attempt $i/30: Checking $HEALTH_URL"
+            RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" -m 10 "$HEALTH_URL" || echo "000")
+            echo "HTTP Status: $RESPONSE"
+            
+            if [ "$RESPONSE" = "200" ]; then
+              echo "✅ Health check passed!"
+              # Show response body
+              curl -s "$HEALTH_URL" | jq '.' || curl -s "$HEALTH_URL"
               success=true
               break
             else
-              echo "⏳ Health check failed, retrying in 15 seconds..."
+              echo "⏳ Health check failed (HTTP $RESPONSE), retrying in 15 seconds..."
+              
+              # Show some debug info every 5 attempts
+              if [ $((i % 5)) -eq 0 ]; then
+                echo ""
+                echo "📋 Recent backend task events:"
+                aws ecs describe-services \
+                  --cluster $ECS_CLUSTER \
+                  --services $ECS_BACKEND_SERVICE \
+                  --query 'services[0].events[0:3].[message]' \
+                  --output text \
+                  --region ${{ env.AWS_REGION }} || true
+                echo ""
+              fi
+              
               sleep 15
             fi
           done
 
           if [ "$success" != "true" ]; then
-            echo "❌ Health check failed after 20 attempts"
+            echo "❌ Health check failed after 30 attempts"
+            echo ""
+            echo "🔍 Detailed diagnostics:"
+            echo "======================="
+            
+            # Get CloudWatch logs
+            echo ""
+            echo "📋 Recent backend logs (last 20 lines):"
+            LOG_GROUP="/ecs/prodready-infra-backend-staging"
+            LATEST_STREAM=$(aws logs describe-log-streams \
+              --log-group-name "$LOG_GROUP" \
+              --order-by LastEventTime \
+              --descending \
+              --max-items 1 \
+              --query 'logStreams[0].logStreamName' \
+              --output text \
+              --region ${{ env.AWS_REGION }} 2>/dev/null || echo "")
+            
+            if [ -n "$LATEST_STREAM" ] && [ "$LATEST_STREAM" != "None" ]; then
+              aws logs get-log-events \
+                --log-group-name "$LOG_GROUP" \
+                --log-stream-name "$LATEST_STREAM" \
+                --limit 20 \
+                --region ${{ env.AWS_REGION }} \
+                --query 'events[*].message' \
+                --output text || echo "Could not fetch logs"
+            else
+              echo "No log streams found"
+            fi
+            
             echo ""
             echo "📋 Backend service events (last 10):"
-            aws ecs describe-services --cluster $ECS_CLUSTER --services $ECS_BACKEND_SERVICE \
-              --query 'services[0].events[0:10].[message,createdAt]' --output table --region ${{ env.AWS_REGION }} || true
+            aws ecs describe-services \
+              --cluster $ECS_CLUSTER \
+              --services $ECS_BACKEND_SERVICE \
+              --query 'services[0].events[0:10].[message,createdAt]' \
+              --output table \
+              --region ${{ env.AWS_REGION }} || true
+            
             echo ""
-            echo "📋 Target health summary:"
-            BACKEND_TG=$(aws ecs describe-services --cluster $ECS_CLUSTER --services $ECS_BACKEND_SERVICE \
-              --query 'services[0].loadBalancers[0].targetGroupArn' --output text --region ${{ env.AWS_REGION }} || true)
+            echo "📋 Target health:"
+            BACKEND_TG=$(aws ecs describe-services \
+              --cluster $ECS_CLUSTER \
+              --services $ECS_BACKEND_SERVICE \
+              --query 'services[0].loadBalancers[0].targetGroupArn' \
+              --output text \
+              --region ${{ env.AWS_REGION }} || true)
+            
             if [ "$BACKEND_TG" != "None" ]; then
-              aws elbv2 describe-target-health --target-group-arn "$BACKEND_TG" --output table --region ${{ env.AWS_REGION }} || true
+              aws elbv2 describe-target-health \
+                --target-group-arn "$BACKEND_TG" \
+                --output table \
+                --region ${{ env.AWS_REGION }} || true
             fi
-            echo ""
-            echo "🔍 Manual check command:"
-            echo "curl -v $HEALTH_URL"
+            
             exit 1
           fi
 
