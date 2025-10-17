@@ -227,9 +227,9 @@ jobs:
         uses: aws-actions/amazon-ecs-deploy-task-definition@v1
         with:
           task-definition: ${{ steps.backend_task_def_render.outputs.task-definition }}
-          service: ${{ steps.tf_outputs.outputs.backend_service }}
-          cluster: ${{ steps.tf_outputs.outputs.cluster_name }}
-          wait-for-service-stability: true
+          service: prodready-infra-backend-service-staging
+          cluster: prodready-infra-cluster-staging
+          wait-for-service-stability: false  # <-- CHANGED
 
       # ✅ NEW STEP: Deploy frontend with rendered task definition
       - name: Deploy Frontend to ECS
