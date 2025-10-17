@@ -1,0 +1,110 @@
+
+
+    "taskDefinitionArn": "arn:aws:ecs:us-east-1:875486186130:task-definition/prodready-infra-backend-staging:13",
+    "containerDefinitions": [
+        {
+            "name": "prodready-infra-backend",
+            "image": "875486186130.dkr.ecr.us-east-1.amazonaws.com/prodready-infra-api:latest",
+            "cpu": 0,
+            "portMappings": [
+                {
+                    "containerPort": 8080,
+                    "hostPort": 8080,
+                    "protocol": "tcp"
+                }
+            ],
+            "essential": true,
+            "environment": [
+                {
+                    "name": "DYNAMODB_TABLE_NAME",
+                    "value": "prodready-infra-items-staging"
+                },
+                {
+                    "name": "NODE_ENV",
+                    "value": "staging"
+                },
+                {
+                    "name": "DATABASE_URL",
+                    "value": "postgresql://appadmin:TempPassword123!@prodready-infra-db-staging.c4nkc6wistr3.us-east-1.rds.amazonaws.com:5432/prodready_infra_staging"
+                },
+                {
+                    "name": "PORT",
+                    "value": "8080"
+                }
+            ],
+            "mountPoints": [],
+            "volumesFrom": [],
+            "logConfiguration": {
+                "logDriver": "awslogs",
+                "options": {
+                    "awslogs-group": "/ecs/prodready-infra-backend-staging",
+                    "awslogs-region": "us-east-1",
+                    "awslogs-stream-prefix": "ecs"
+                }
+            },
+            "healthCheck": {
+                "command": [
+                    "CMD-SHELL",
+                    "curl -f http://localhost:8080/api/health || exit 1"
+                ],
+                "interval": 30,
+                "timeout": 10,
+                "retries": 3,
+                "startPeriod": 60
+            },
+            "systemControls": []
+        }
+    ],
+    "family": "prodready-infra-backend-staging",
+    "taskRoleArn": "arn:aws:iam::875486186130:role/prodready-infra-task-role-staging",
+    "executionRoleArn": "arn:aws:iam::875486186130:role/prodready-infra-task-execution-role-staging",
+    "networkMode": "awsvpc",
+    "revision": 13,
+    "volumes": [],
+    "status": "ACTIVE",
+    "requiresAttributes": [
+        {
+            "name": "com.amazonaws.ecs.capability.logging-driver.awslogs"
+        },
+        {
+            "name": "ecs.capability.execution-role-awslogs"
+        },
+        {
+            "name": "com.amazonaws.ecs.capability.ecr-auth"
+        },
+        {
+            "name": "com.amazonaws.ecs.capability.docker-remote-api.1.19"
+        },
+        {
+            "name": "com.amazonaws.ecs.capability.task-iam-role"
+        },
+        {
+            "name": "ecs.capability.container-health-check"
+        },
+        {
+            "name": "ecs.capability.execution-role-ecr-pull"
+        },
+        {
+            "name": "com.amazonaws.ecs.capability.docker-remote-api.1.18"
+        },
+        {
+            "name": "ecs.capability.task-eni"
+        },
+        {
+            "name": "com.amazonaws.ecs.capability.docker-remote-api.1.29"
+        }
+    ],
+    "placementConstraints": [],
+    "compatibilities": [
+        "EC2",
+        "FARGATE",
+        "MANAGED_INSTANCES"
+    ],
+    "requiresCompatibilities": [
+        "FARGATE"
+    ],
+    "cpu": "256",
+    "memory": "512",
+    "registeredAt": "2025-10-10T22:47:38.539000+03:00",
+    "registeredBy": "arn:aws:iam::875486186130:user/alidev_test"
+}

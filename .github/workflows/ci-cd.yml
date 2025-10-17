@@ -180,215 +180,96 @@ jobs:
           echo "Frontend Service: $FRONTEND_SERVICE"
         continue-on-error: false
 
-      - name: Update Backend Task Definition
-        id: backend_task_def
-        run: |
-          echo "📝 Updating backend task definition with new image..."
-          
-          TASK_FAMILY="prodready-infra-backend-task-staging"
-          echo "Looking for task definition family: $TASK_FAMILY"
-          
-          # Check if task definition exists
-          if ! aws ecs describe-task-definition --task-definition "$TASK_FAMILY" --region ${{ env.AWS_REGION }} >/dev/null 2>&1; then
-            echo "⚠️ Task definition doesn't exist yet. This is expected on first deployment."
-            echo "Terraform should have created it. Waiting 30 seconds..."
-            sleep 30
-          fi
-          
-          # Get current task definition
-          TASK_DEF=$(aws ecs describe-task-definition \
-            --task-definition "$TASK_FAMILY" \
-            --region ${{ env.AWS_REGION }})
-          
-          if [ $? -ne 0 ]; then
-            echo "❌ Failed to get task definition after waiting"
-            echo "Available task definitions:"
-            aws ecs list-task-definitions --region ${{ env.AWS_REGION }} | grep -i backend || echo "No backend task definitions found"
-            echo ""
-            echo "This might be the first deployment. Skipping task definition update."
-            echo "ECS will use the task definition created by Terraform."
-            exit 0
-          fi
-          
-          # Create new task definition with updated image
-          NEW_TASK_DEF=$(echo "$TASK_DEF" | jq --arg IMAGE "${{ steps.backend_image.outputs.image_uri }}" '
-            .taskDefinition |
-            .containerDefinitions[0].image = $IMAGE |
-            del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)
-          ')
-          
-          # Register new task definition
-          NEW_TASK_INFO=$(aws ecs register-task-definition \
-            --cli-input-json "$NEW_TASK_DEF" \
-            --region ${{ env.AWS_REGION }})
-          
-          NEW_REVISION=$(echo "$NEW_TASK_INFO" | jq -r '.taskDefinition.revision')
-          echo "✅ New backend task definition revision: $NEW_REVISION"
-          echo "revision=$NEW_REVISION" >> $GITHUB_OUTPUT
-          echo "family=$TASK_FAMILY" >> $GITHUB_OUTPUT
+      # ✅ NEW STEP: Render task definition with environment variables
+      - name: Render Backend Task Definition
+        id: backend_task_def_render
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: api/task-definition.json
+          container-name: prodready-infra-backend
+          image: ${{ steps.backend_image.outputs.image_uri }}
+          environment-variables: |
+            PORT=8080
+            NODE_ENV=production
+            POSTGRES_HOST=${{ secrets.POSTGRES_HOST }}
+            POSTGRES_DB=${{ secrets.POSTGRES_DB }}
+            POSTGRES_USER=${{ secrets.POSTGRES_USER }}
+            POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+            DATABASE_URL=${{ secrets.DATABASE_URL }}
+            JWT_SECRET=${{ secrets.JWT_SECRET }}
+            EMAIL=${{ secrets.EMAIL }}
+            APP_PASSWORD=${{ secrets.APP_PASSWORD }}
+            EMAIL_PASSWORD=${{ secrets.EMAIL_PASSWORD }}
+            ADMIN_EMAIL=${{ secrets.ADMIN_EMAIL }}
+            PROCUREMENT_EMAIL=${{ secrets.PROCUREMENT_EMAIL }}
+            FINANCE_EMAIL=${{ secrets.FINANCE_EMAIL }}
+            ADMIN_PASSWORD=${{ secrets.ADMIN_PASSWORD }}
+            DEFAULT_USER_PASSWORD=${{ secrets.DEFAULT_USER_PASSWORD }}
+            FRONTEND_URL=${{ vars.FRONTEND_URL }}
+            FRONTEND_URL_PROD=${{ vars.FRONTEND_URL_PROD }}
+            API_BASE_URL=${{ vars.API_BASE_URL }}
+            API_BASE_URL_PROD=${{ vars.API_BASE_URL_PROD }}
 
-      - name: Update Frontend Task Definition
-        id: frontend_task_def
-        run: |
-          echo "📝 Updating frontend task definition with new image..."
-          
-          TASK_FAMILY="prodready-infra-frontend-task-staging"
-          echo "Looking for task definition family: $TASK_FAMILY"
-          
-          # Check if task definition exists
-          if ! aws ecs describe-task-definition --task-definition "$TASK_FAMILY" --region ${{ env.AWS_REGION }} >/dev/null 2>&1; then
-            echo "⚠️ Task definition doesn't exist yet. This is expected on first deployment."
-            echo "Terraform should have created it. Waiting 30 seconds..."
-            sleep 30
-          fi
-          
-          # Get current task definition
-          TASK_DEF=$(aws ecs describe-task-definition \
-            --task-definition "$TASK_FAMILY" \
-            --region ${{ env.AWS_REGION }})
-          
-          if [ $? -ne 0 ]; then
-            echo "❌ Failed to get task definition after waiting"
-            echo "Available task definitions:"
-            aws ecs list-task-definitions --region ${{ env.AWS_REGION }} | grep -i frontend || echo "No frontend task definitions found"
-            echo ""
-            echo "This might be the first deployment. Skipping task definition update."
-            echo "ECS will use the task definition created by Terraform."
-            exit 0
-          fi
-          
-          # Create new task definition with updated image
-          NEW_TASK_DEF=$(echo "$TASK_DEF" | jq --arg IMAGE "${{ steps.frontend_image.outputs.image_uri }}" '
-            .taskDefinition |
-            .containerDefinitions[0].image = $IMAGE |
-            del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)
-          ')
-          
-          # Register new task definition
-          NEW_TASK_INFO=$(aws ecs register-task-definition \
-            --cli-input-json "$NEW_TASK_DEF" \
-            --region ${{ env.AWS_REGION }})
-          
-          NEW_REVISION=$(echo "$NEW_TASK_INFO" | jq -r '.taskDefinition.revision')
-          echo "✅ New frontend task definition revision: $NEW_REVISION"
-          echo "revision=$NEW_REVISION" >> $GITHUB_OUTPUT
-          echo "family=$TASK_FAMILY" >> $GITHUB_OUTPUT
+      # ✅ NEW STEP: Render frontend task definition
+      - name: Render Frontend Task Definition
+        id: frontend_task_def_render
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: ui/task-definition.json
+          container-name: prodready-infra-frontend
+          image: ${{ steps.frontend_image.outputs.image_uri }}
+          environment-variables: |
+            NODE_ENV=production
+            REACT_APP_API_URL=${{ vars.API_BASE_URL }}
 
-      - name: Update ECS Services
-        run: |
-          echo "🔄 Forcing ECS services to redeploy..."
-          
-          # Update backend service
-          echo "Updating backend service..."
-          if [ -n "${{ steps.backend_task_def.outputs.revision }}" ]; then
-            aws ecs update-service \
-              --cluster ${{ steps.tf_outputs.outputs.cluster_name }} \
-              --service ${{ steps.tf_outputs.outputs.backend_service }} \
-              --task-definition "${{ steps.backend_task_def.outputs.family }}:${{ steps.backend_task_def.outputs.revision }}" \
-              --force-new-deployment \
-              --region ${{ env.AWS_REGION }}
-          else
-            echo "No new task definition, just forcing deployment"
-            aws ecs update-service \
-              --cluster ${{ steps.tf_outputs.outputs.cluster_name }} \
-              --service ${{ steps.tf_outputs.outputs.backend_service }} \
-              --force-new-deployment \
-              --region ${{ env.AWS_REGION }}
-          fi
-          
-          # Update frontend service
-          echo "Updating frontend service..."
-          if [ -n "${{ steps.frontend_task_def.outputs.revision }}" ]; then
-            aws ecs update-service \
-              --cluster ${{ steps.tf_outputs.outputs.cluster_name }} \
-              --service ${{ steps.tf_outputs.outputs.frontend_service }} \
-              --task-definition "${{ steps.frontend_task_def.outputs.family }}:${{ steps.frontend_task_def.outputs.revision }}" \
-              --force-new-deployment \
-              --region ${{ env.AWS_REGION }}
-          else
-            echo "No new task definition, just forcing deployment"
-            aws ecs update-service \
-              --cluster ${{ steps.tf_outputs.outputs.cluster_name }} \
-              --service ${{ steps.tf_outputs.outputs.frontend_service }} \
-              --force-new-deployment \
-              --region ${{ env.AWS_REGION }}
-          fi
-          
-          echo "✅ ECS services update initiated"
+      # ✅ NEW STEP: Deploy backend with rendered task definition
+      - name: Deploy Backend to ECS
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ steps.backend_task_def_render.outputs.task-definition }}
+          service: ${{ steps.tf_outputs.outputs.backend_service }}
+          cluster: ${{ steps.tf_outputs.outputs.cluster_name }}
+          wait-for-service-stability: true
 
-      - name: Wait for Deployment
-        run: |
-          echo "⏳ Waiting for services to stabilize (max 10 minutes)..."
-          
-          # Wait for backend
-          echo "Waiting for backend service..."
-          timeout 600 aws ecs wait services-stable \
-            --cluster ${{ steps.tf_outputs.outputs.cluster_name }} \
-            --services ${{ steps.tf_outputs.outputs.backend_service }} \
-            --region ${{ env.AWS_REGION }} && echo "✅ Backend stable" || echo "⚠️ Backend wait timeout"
-
-          # Wait for frontend
-          echo "Waiting for frontend service..."
-          timeout 600 aws ecs wait services-stable \
-            --cluster ${{ steps.tf_outputs.outputs.cluster_name }} \
-            --services ${{ steps.tf_outputs.outputs.frontend_service }} \
-            --region ${{ env.AWS_REGION }} && echo "✅ Frontend stable" || echo "⚠️ Frontend wait timeout"
+      # ✅ NEW STEP: Deploy frontend with rendered task definition
+      - name: Deploy Frontend to ECS
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ steps.frontend_task_def_render.outputs.task-definition }}
+          service: ${{ steps.tf_outputs.outputs.frontend_service }}
+          cluster: ${{ steps.tf_outputs.outputs.cluster_name }}
+          wait-for-service-stability: true
 
       - name: Health Check
         run: |
           echo "🏥 Running health checks..."
           
-          # Get ALB DNS from Terraform output
-          cd terraform
-          ALB_DNS=$(terraform output -raw lb_dns_name 2>/dev/null || echo "prodready-infra-alb-staging-212250592.us-east-1.elb.amazonaws.com")
-          cd ..
+          ALB_DNS=$(aws elbv2 describe-load-balancers \
+            --names prodready-infra-alb-staging \
+            --query 'LoadBalancers[0].DNSName' \
+            --output text \
+            --region ${{ env.AWS_REGION }})
           
-          HEALTH_URL="http://${ALB_DNS}/api/health"
-          echo "Health check URL: $HEALTH_URL"
-
+          echo "Load Balancer: $ALB_DNS"
+          
           success=false
           for i in {1..30}; do
-            echo "Attempt $i/30: Checking $HEALTH_URL"
-            RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" -m 10 "$HEALTH_URL" || echo "000")
+            echo "Health check $i/30..."
+            RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" -m 10 "http://$ALB_DNS/api/health" || echo "000")
             echo "HTTP Status: $RESPONSE"
             
             if [ "$RESPONSE" = "200" ]; then
               echo "✅ Health check passed!"
-              curl -s "$HEALTH_URL" | jq '.' 2>/dev/null || curl -s "$HEALTH_URL"
               success=true
               break
+            elif [ $i -eq 30 ]; then
+              echo "❌ Health check failed after 30 attempts"
+              exit 1
             else
               echo "⏳ Retrying in 15 seconds..."
               sleep 15
             fi
           done
-
-          if [ "$success" != "true" ]; then
-            echo "❌ Health check failed after 30 attempts"
-            echo "Showing recent logs..."
-            
-            LOG_GROUP="/ecs/prodready-infra-backend-staging"
-            LATEST_STREAM=$(aws logs describe-log-streams \
-              --log-group-name "$LOG_GROUP" \
-              --order-by LastEventTime \
-              --descending \
-              --max-items 1 \
-              --query 'logStreams[0].logStreamName' \
-              --output text \
-              --region ${{ env.AWS_REGION }} 2>/dev/null || echo "")
-            
-            if [ -n "$LATEST_STREAM" ] && [ "$LATEST_STREAM" != "None" ]; then
-              aws logs get-log-events \
-                --log-group-name "$LOG_GROUP" \
-                --log-stream-name "$LATEST_STREAM" \
-                --limit 50 \
-                --region ${{ env.AWS_REGION }} \
-                --query 'events[*].message' \
-                --output text 2>/dev/null || echo "Could not fetch logs"
-            fi
-            
-            exit 1
-          fi
 
       - name: Deployment Summary
         if: always()
