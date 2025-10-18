@@ -255,13 +255,15 @@ async function main() {
   const existingUser = await prisma.user.findUnique({
     where: { email: 'admin@itrack.com' },
   });
+
   if (!existingUser) {
+    // Create new user
     await prisma.user.create({
       data: {
         email: 'admin@itrack.com',
         firstName: 'Admin',
         lastName: 'User',
-        password: bcrypt.hashSync(process.env.ADMIN_PASSWORD, 10),
+        password: bcrypt.hashSync(process.env.ADMIN_PASSWORD || 'admin123', 10),
         status: true,
         role: {
           connect: { name: 'admin' },
@@ -270,8 +272,21 @@ async function main() {
         updatedAt: new Date(),
       },
     });
+    console.log('✅ Admin user created successfully');
   } else {
-    console.log('User with email admin@itrack.com already exists.');
+    // Update existing user password if ADMIN_PASSWORD is set
+    if (process.env.ADMIN_PASSWORD) {
+      await prisma.user.update({
+        where: { email: 'admin@itrack.com' },
+        data: {
+          password: bcrypt.hashSync(process.env.ADMIN_PASSWORD, 10),
+          updatedAt: new Date(),
+        },
+      });
+      console.log('✅ Admin password updated to new ADMIN_PASSWORD');
+    } else {
+      console.log('⚠️  User with email admin@itrack.com already exists, but ADMIN_PASSWORD is not set');
+    }
   }
 
   if (process.env.SEED_TEST_USERS) {
