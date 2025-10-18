@@ -118,6 +118,7 @@ app.use(bodyParser.json({ limit: '50mb' }));
 app.use(bodyParser.urlencoded({ extended: true, limit: '50mb' }));
 app.use(bodyParser.raw({ type: 'application/pdf', limit: '50mb' }));
 
+
 // Health check endpoint (outside /api for ALB health checks)
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'healthy', timestamp: new Date().toISOString() });
