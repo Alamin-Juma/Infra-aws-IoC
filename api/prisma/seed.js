@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import { permissionsSeed } from './permissionsSeed.js';
 import { connect } from 'puppeteer-core';
 
+
 const prisma = new PrismaClient();
 
 const testUsers = [
