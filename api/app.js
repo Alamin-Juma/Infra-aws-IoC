@@ -136,6 +136,7 @@ apiRouter.get('/health', (req, res) => {
 apiRouter.use('/auth', loginRoutes);
 apiRouter.use('/forgot-password', passwordResetRoute);
 
+
 // Apply authentication middleware to all routes after this point
 apiRouter.use(authenticateToken);
 apiRouter.use(checkPermissions);
