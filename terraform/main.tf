@@ -168,29 +168,29 @@ module "ecs" {
 }
 
 # CloudWatch Monitoring and Alarms (disabled for initial deployment)
-# module "monitoring" {
-#   source = "./modules/monitoring"
-#   
-#   environment   = var.environment
-#   project_name  = var.project_name
-#   
-#   # ECS Alarms
-#   cluster_name  = module.ecs.cluster_name
-#   service_names = module.ecs.service_names
-#   
-#   # RDS Alarms
-#   db_instance_id = module.rds.db_instance_id
-#   
-#   # Lambda Alarms
-#   lambda_function_names = module.lambda.function_names
-#   
-#   # API Gateway Alarms
-#   api_gateway_name = module.api_gateway.api_name
-#   
-#   # Create appropriate dashboards and alerts
-#   create_dashboard = true
-#   notification_emails = var.notification_emails
-# }
+module "monitoring" {
+  source = "./modules/monitoring"
+  
+  environment      = var.environment
+  project_name     = var.project_name
+  cluster_name     = module.ecs.cluster_name
+  service_names    = [
+    "${var.project_name}-backend-service-${var.environment}",
+    "${var.project_name}-frontend-service-${var.environment}"
+  ]
+  db_instance_id   = module.rds.db_instance_id
+  
+  # NEW: Cost optimization variables
+  log_retention_days         = var.log_retention_days
+  enable_s3_log_archive      = var.enable_s3_log_archive
+  s3_log_transition_days     = var.s3_log_transition_days
+  s3_log_expiration_days     = var.s3_log_expiration_days
+  enable_detailed_monitoring = var.enable_detailed_monitoring
+  enable_all_alarms          = var.enable_all_alarms
+  
+  notification_emails = var.notification_emails
+  create_dashboard    = true
+}
 
 # S3 Bucket for Frontend Assets (if needed)
 module "s3_hosting" {

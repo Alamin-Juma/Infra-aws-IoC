@@ -274,3 +274,39 @@ variable "sensitive_secrets" {
     }
   }
 }
+
+variable "log_retention_days" {
+  description = "CloudWatch log retention in days"
+  type        = number
+  default     = 7
+}
+
+variable "enable_s3_log_archive" {
+  description = "Enable S3 log archiving"
+  type        = bool
+  default     = false
+}
+
+variable "s3_log_transition_days" {
+  description = "Days before moving logs to S3"
+  type        = number
+  default     = 7
+}
+
+variable "s3_log_expiration_days" {
+  description = "Days before deleting logs"
+  type        = number
+  default     = 90
+}
+
+variable "enable_detailed_monitoring" {
+  description = "Enable detailed monitoring"
+  type        = bool
+  default     = false
+}
+
+variable "enable_all_alarms" {
+  description = "Enable all alarms (vs critical only)"
+  type        = bool
+  default     = true
+}

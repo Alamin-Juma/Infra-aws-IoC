@@ -102,3 +102,19 @@ waf_allowed_countries = ["US", "CA", "GB", "AU"]
 
 # ACM Certificate (empty for initial deployment)
 acm_certificate_arn = ""
+
+# Existing variables (keep these)
+project_name = "prodready-infra"
+environment  = "production"
+aws_region   = "us-east-1"
+
+# Cost-optimized monitoring for production
+log_retention_days         = 7      # 7 days in CloudWatch (free tier)
+enable_s3_log_archive      = true   # Archive to S3 for compliance
+s3_log_transition_days     = 7      # Move to S3 after 7 days
+s3_log_expiration_days     = 365    # Keep for 1 year
+enable_detailed_monitoring = false  # Still disabled to save costs
+enable_all_alarms          = true   # All alarms for production
+
+# Notification emails
+notification_emails = ["your-email@example.com", "team@example.com"]
