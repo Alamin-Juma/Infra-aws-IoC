@@ -41,7 +41,7 @@ resource "aws_cloudwatch_log_group" "ecs_backend" {
 
 # ECS alarms (only created when enable_all_alarms = true)
 resource "aws_cloudwatch_metric_alarm" "ecs_cpu" {
-  for_each = var.enable_all_alarms ? toset(var.service_names) : {}
+  for_each = var.enable_all_alarms ? toset(var.service_names) : toset([])
   alarm_name          = "${each.value}-cpu-${var.environment}"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 3
@@ -67,7 +67,7 @@ resource "aws_cloudwatch_metric_alarm" "ecs_cpu" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "ecs_memory" {
-  for_each = var.enable_all_alarms ? toset(var.service_names) : {}
+  for_each = var.enable_all_alarms ? toset(var.service_names) : toset([])
   alarm_name          = "${each.value}-memory-${var.environment}"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 3
@@ -173,7 +173,7 @@ resource "aws_cloudwatch_metric_alarm" "rds_disk_queue_depth" {
 
 # Lambda alarms
 resource "aws_cloudwatch_metric_alarm" "lambda_errors" {
-  for_each = var.enable_all_alarms ? toset(var.lambda_function_names) : {}
+  for_each = var.enable_all_alarms ? toset(var.lambda_function_names) : toset([])
   alarm_name          = "${each.value}-errors-${var.environment}"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
@@ -199,7 +199,7 @@ resource "aws_cloudwatch_metric_alarm" "lambda_errors" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "lambda_throttles" {
-  for_each = var.enable_all_alarms ? toset(var.lambda_function_names) : {}
+  for_each = var.enable_all_alarms ? toset(var.lambda_function_names) : toset([])
   alarm_name          = "${each.value}-throttles-${var.environment}"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
