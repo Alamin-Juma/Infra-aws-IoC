@@ -388,38 +388,7 @@ resource "aws_cloudwatch_dashboard" "main" {
             stat    = "Average"
           }
         }
-      ] : [
-        {
-          type = "text"
-          x    = 0
-          y    = 1
-          width = 24
-          height = 1
-          properties = {
-            markdown = "## ECS Services (None configured)"
-          }
-        },
-        {
-          type = "text"
-          x    = 0
-          y    = 2
-          width = 12
-          height = 6
-          properties = {
-            markdown = "No ECS services to display"
-          }
-        },
-        {
-          type = "text"
-          x    = 12
-          y    = 2
-          width = 12
-          height = 6
-          properties = {
-            markdown = ""
-          }
-        }
-      ],
+      ] : [],
       # RDS Widgets
       var.db_instance_id != "" ? [
         {
@@ -468,38 +437,7 @@ resource "aws_cloudwatch_dashboard" "main" {
             stat    = "Average"
           }
         }
-      ] : [
-        {
-          type = "text"
-          x    = 0
-          y    = 8
-          width = 24
-          height = 1
-          properties = {
-            markdown = "## RDS Database (None configured)"
-          }
-        },
-        {
-          type = "text"
-          x    = 0
-          y    = 9
-          width = 12
-          height = 6
-          properties = {
-            markdown = "No RDS instance to display"
-          }
-        },
-        {
-          type = "text"
-          x    = 12
-          y    = 9
-          width = 12
-          height = 6
-          properties = {
-            markdown = ""
-          }
-        }
-      ],
+      ] : [],
       # Lambda Widgets
       length(var.lambda_function_names) > 0 ? [
         {
@@ -575,50 +513,57 @@ resource "aws_cloudwatch_dashboard" "main" {
             stat    = "Average"
           }
         }
-      ] : [
-        {
-          type = "text"
-          x    = 0
-          y    = 15
-          width = 24
-          height = 1
-          properties = {
-            markdown = "## Lambda Functions (None configured)"
-          }
-        },
-        {
-          type = "text"
-          x    = 0
-          y    = 16
-          width = 8
-          height = 6
-          properties = {
-            markdown = ""
-          }
-        },
-        {
-          type = "text"
-          x    = 8
-          y    = 16
-          width = 8
-          height = 6
-          properties = {
-            markdown = ""
-          }
-        },
-        {
-          type = "text"
-          x    = 16
-          y    = 16
-          width = 8
-          height = 6
-          properties = {
-            markdown = ""
-          }
-        }
-      ]
+      ] : []
     )
   })
+}
+
+# S3 bucket for cost-effective log archiving (optional)
+resource "aws_s3_bucket" "logs_archive" {
+  count  = var.enable_s3_log_archive ? 1 : 0
+  bucket = "${var.project_name}-logs-archive-${var.environment}"
   
-  # ❌ REMOVED: tags not supported by aws_cloudwatch_dashboard
+  tags = {
+    Name        = "${var.project_name}-logs-archive"
+    Environment = var.environment
+    Purpose     = "Cost-effective log storage"
+  }
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "logs_lifecycle" {
+  count  = var.enable_s3_log_archive ? 1 : 0
+  bucket = aws_s3_bucket.logs_archive[0].id
+  
+  rule {
+    id     = "archive-old-logs"
+    status = "Enabled"
+    
+    transition {
+      days          = 30
+      storage_class = "GLACIER"
+    }
+    
+    expiration {
+      days = var.s3_log_expiration_days
+    }
+  }
+}
+
+resource "aws_s3_bucket_versioning" "logs_versioning" {
+  count  = var.enable_s3_log_archive ? 1 : 0
+  bucket = aws_s3_bucket.logs_archive[0].id
+  
+  versioning_configuration {
+    status = "Disabled"
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "logs_public_access" {
+  count  = var.enable_s3_log_archive ? 1 : 0
+  bucket = aws_s3_bucket.logs_archive[0].id
+  
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
 }
