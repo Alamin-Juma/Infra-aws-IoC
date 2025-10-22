@@ -2,35 +2,36 @@
 # Environment: Staging
 
 # AWS Configuration
-aws_region = "us-east-1"
+aws_region     = "us-east-1"
 aws_account_id = "875486186130"
-environment = "staging"
-project_name = "prodready-infra"
+environment    = "staging"
+project_name   = "prodready-infra"
 
 # VPC Configuration
-vpc_cidr = "10.1.0.0/16"  # Different CIDR for staging
-az_count = 2
-public_subnets = ["10.1.1.0/24", "10.1.2.0/24"]
+vpc_cidr        = "10.1.0.0/16"  # Different CIDR for staging
+az_count        = 2
+public_subnets  = ["10.1.1.0/24", "10.1.2.0/24"]
 private_subnets = ["10.1.10.0/24", "10.1.11.0/24"]
 
 # Application Configuration
-app_port = 8080
+app_port          = 8080
 health_check_path = "/api/health"
 
 # Security Configuration (Restricted for staging)
-allowed_ips = ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]  # Private networks only
+allowed_ips     = ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]  # Private networks only
 allowed_domains = ["staging.prodready-infra.com"]
 
 # Database Configuration (Non-Sensitive)
-db_name = "prodready_infra_staging"
+db_name           = "prodready_infra_staging"
 db_instance_class = "db.t3.micro"  # Smaller instance for staging
-# Note: db_password should be set via environment variable or AWS Secrets Manager
-# Export TF_VAR_db_password="your_password_here" or use AWS Secrets Manager
+db_username       = "appadmin"
+db_password       = "TempPassword123!"  # Temporary password for staging deployment
+# Note: Set TF_VAR_db_password environment variable for production
 
 # ECS Configuration (Smaller for staging)
 ecs_desired_count = 1
-ecs_cpu = 256
-ecs_memory = 512
+ecs_cpu           = 256
+ecs_memory        = 512
 
 # Notification
 notification_emails = ["dev-alerts@prodready-infra.com"]
@@ -51,11 +52,6 @@ cloudfront_cache_settings = {
     max_ttl     = 300     # 5 minutes
   }
 }
-
-# Database User Configuration (Sensitive data via environment variables)
-db_username = "appadmin"
-db_password = "TempPassword123!"  # Temporary password for staging deployment
-# Note: Set TF_VAR_db_password environment variable for production
 
 # Lambda Functions Configuration
 lambda_functions = [
@@ -92,27 +88,21 @@ dynamodb_tables = [
 ]
 
 # Backup Configuration
-backup_retention_days = 7
+backup_retention_days      = 7
 enable_cross_region_backup = false
 cross_region_backup_region = "us-west-2"
 
 # WAF Configuration
-waf_rate_limit = 10000
-waf_allowed_countries = ["US", "CA", "GB", "AU"]
+waf_rate_limit         = 10000
+waf_allowed_countries  = ["US", "CA", "GB", "AU"]
 
 # ACM Certificate (empty for initial deployment)
 acm_certificate_arn = ""
 
-# Existing variables (keep these)
-project_name = "prodready-infra"
-environment  = "staging"
-aws_region   = "us-east-1"
-
-# Cost-optimized monitoring for production
-log_retention_days         = 3      # 3 days in CloudWatch (free tier)
-enable_s3_log_archive      = false   # Archive to S3 for compliance
-enable_detailed_monitoring = false  # Still disabled to save costs
-enable_all_alarms          = false   # All alarms for production
-
-# Notification emails
-notification_emails = ["your-email@example.com"]
+# Cost-Optimized Monitoring for Staging
+log_retention_days         = 3      # 3 days in CloudWatch (saves costs)
+enable_s3_log_archive      = false  # Disabled for staging
+s3_log_transition_days     = 3      # Not used when archive disabled
+s3_log_expiration_days     = 90     # Not used when archive disabled
+enable_detailed_monitoring = false  # Disabled to save costs
+enable_all_alarms          = false  # Only critical alarms for staging
