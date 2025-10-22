@@ -332,13 +332,13 @@ resource "aws_cloudwatch_dashboard" "main" {
                 "ClusterName", var.cluster_name,
                 "ServiceName", service
               ]
-            ],
-            view = "timeSeries",
-            stacked = false,
-            region = "us-east-1",
-            title = "ECS CPU Utilization",
-            period = 300,
-            stat = "Average"
+            ]
+            view    = "timeSeries"
+            stacked = false
+            region  = "us-east-1"
+            title   = "ECS CPU Utilization"
+            period  = 300
+            stat    = "Average"
           }
         },
         {
@@ -354,18 +354,17 @@ resource "aws_cloudwatch_dashboard" "main" {
                 "ClusterName", var.cluster_name,
                 "ServiceName", service
               ]
-            ],
-            view = "timeSeries",
-            stacked = false,
-            region = "us-east-1",
-            title = "ECS Memory Utilization",
-            period = 300,
-            stat = "Average"
+            ]
+            view    = "timeSeries"
+            stacked = false
+            region  = "us-east-1"
+            title   = "ECS Memory Utilization"
+            period  = 300
+            stat    = "Average"
           }
         }
-      ] : [],
-      # RDS Widgets - simplified to always show (conditional logic can be complex)
-      [
+      ] : [
+        # Empty placeholder when no ECS services
         {
           type = "text"
           x    = 0
@@ -373,16 +372,85 @@ resource "aws_cloudwatch_dashboard" "main" {
           width = 24
           height = 1
           properties = {
-            markdown = "## RDS Database"
+            markdown = "## ECS Services (None configured)"
+          }
+        },
+        {
+          type = "text"
+          x    = 0
+          y    = 2
+          width = 24
+          height = 1
+          properties = {
+            markdown = "No ECS services to display"
+          }
+        },
+        {
+          type = "text"
+          x    = 0
+          y    = 3
+          width = 24
+          height = 1
+          properties = {
+            markdown = ""
           }
         }
       ],
+      # RDS Widgets
+      var.db_instance_id != "" ? [
+        {
+          type = "text"
+          x    = 0
+          y    = 8
+          width = 24
+          height = 1
+          properties = {
+            markdown = "## RDS Database"
+          }
+        },
+        {
+          type = "metric"
+          x    = 0
+          y    = 9
+          width = 12
+          height = 6
+          properties = {
+            metrics = [
+              ["AWS/RDS", "CPUUtilization", "DBInstanceIdentifier", var.db_instance_id]
+            ]
+            view    = "timeSeries"
+            stacked = false
+            region  = "us-east-1"
+            title   = "RDS CPU Utilization"
+            period  = 300
+            stat    = "Average"
+          }
+        },
+        {
+          type = "metric"
+          x    = 12
+          y    = 9
+          width = 12
+          height = 6
+          properties = {
+            metrics = [
+              ["AWS/RDS", "FreeableMemory", "DBInstanceIdentifier", var.db_instance_id]
+            ]
+            view    = "timeSeries"
+            stacked = false
+            region  = "us-east-1"
+            title   = "RDS Freeable Memory"
+            period  = 300
+            stat    = "Average"
+          }
+        }
+      ] : [],
       # Lambda Widgets
       length(var.lambda_function_names) > 0 ? [
         {
           type = "text"
           x    = 0
-          y    = 8 # Fixed y-coordinate
+          y    = 15
           width = 24
           height = 1
           properties = {
@@ -392,7 +460,7 @@ resource "aws_cloudwatch_dashboard" "main" {
         {
           type = "metric"
           x    = 0
-          y    = 9 # Fixed y-coordinate
+          y    = 16
           width = 8
           height = 6
           properties = {
@@ -401,19 +469,19 @@ resource "aws_cloudwatch_dashboard" "main" {
                 "AWS/Lambda", "Invocations",
                 "FunctionName", lambda
               ]
-            ],
-            view = "timeSeries",
-            stacked = false,
-            region = "us-east-1",
-            title = "Lambda Invocations",
-            period = 300,
-            stat = "Sum"
+            ]
+            view    = "timeSeries"
+            stacked = false
+            region  = "us-east-1"
+            title   = "Lambda Invocations"
+            period  = 300
+            stat    = "Sum"
           }
         },
         {
           type = "metric"
           x    = 8
-          y    = 9 # Fixed y-coordinate
+          y    = 16
           width = 8
           height = 6
           properties = {
@@ -422,19 +490,19 @@ resource "aws_cloudwatch_dashboard" "main" {
                 "AWS/Lambda", "Errors",
                 "FunctionName", lambda
               ]
-            ],
-            view = "timeSeries",
-            stacked = false,
-            region = "us-east-1",
-            title = "Lambda Errors",
-            period = 300,
-            stat = "Sum"
+            ]
+            view    = "timeSeries"
+            stacked = false
+            region  = "us-east-1"
+            title   = "Lambda Errors"
+            period  = 300
+            stat    = "Sum"
           }
         },
         {
           type = "metric"
           x    = 16
-          y    = 9 # Fixed y-coordinate
+          y    = 16
           width = 8
           height = 6
           properties = {
@@ -443,18 +511,17 @@ resource "aws_cloudwatch_dashboard" "main" {
                 "AWS/Lambda", "Duration",
                 "FunctionName", lambda
               ]
-            ],
-            view = "timeSeries",
-            stacked = false,
-            region = "us-east-1",
-            title = "Lambda Duration",
-            period = 300,
-            stat = "Average"
+            ]
+            view    = "timeSeries"
+            stacked = false
+            region  = "us-east-1"
+            title   = "Lambda Duration"
+            period  = 300
+            stat    = "Average"
           }
         }
-      ] : [],
-      # API Gateway Widgets - simplified
-      [
+      ] : [
+        # Empty placeholder when no Lambda functions (must match 4 widgets)
         {
           type = "text"
           x    = 0
@@ -462,10 +529,47 @@ resource "aws_cloudwatch_dashboard" "main" {
           width = 24
           height = 1
           properties = {
-            markdown = "## API Gateway"
+            markdown = "## Lambda Functions (None configured)"
+          }
+        },
+        {
+          type = "text"
+          x    = 0
+          y    = 16
+          width = 8
+          height = 1
+          properties = {
+            markdown = ""
+          }
+        },
+        {
+          type = "text"
+          x    = 8
+          y    = 16
+          width = 8
+          height = 1
+          properties = {
+            markdown = ""
+          }
+        },
+        {
+          type = "text"
+          x    = 16
+          y    = 16
+          width = 8
+          height = 1
+          properties = {
+            markdown = ""
           }
         }
       ]
     )
   })
+
+  tags = {
+    Name        = "${var.project_name}-dashboard"
+    Environment = var.environment
+  }
 }
+
+# ✅ No outputs here - they're in outputs.tf
