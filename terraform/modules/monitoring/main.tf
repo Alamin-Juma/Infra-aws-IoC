@@ -16,9 +16,9 @@ resource "aws_sns_topic_subscription" "email_subscriptions" {
   endpoint  = var.notification_emails[count.index]
 }
 
-# ECS Alarms
+# ✅ COST-OPTIMIZED: ECS Alarms (only if enable_all_alarms = true)
 resource "aws_cloudwatch_metric_alarm" "ecs_cpu" {
-  for_each = toset(var.service_names)
+  for_each = var.enable_all_alarms ? toset(var.service_names) : []
   
   alarm_name          = "${each.value}-cpu-${var.environment}"
   comparison_operator = "GreaterThanThreshold"
@@ -45,7 +45,7 @@ resource "aws_cloudwatch_metric_alarm" "ecs_cpu" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "ecs_memory" {
-  for_each = toset(var.service_names)
+  for_each = var.enable_all_alarms ? toset(var.service_names) : []
   
   alarm_name          = "${each.value}-memory-${var.environment}"
   comparison_operator = "GreaterThanThreshold"
@@ -71,7 +71,7 @@ resource "aws_cloudwatch_metric_alarm" "ecs_memory" {
   }
 }
 
-# RDS Alarms
+# ✅ CRITICAL ONLY: RDS CPU Alarm (always created for production safety)
 resource "aws_cloudwatch_metric_alarm" "rds_cpu" {
   count = var.db_instance_id != "" ? 1 : 0
   
@@ -98,8 +98,9 @@ resource "aws_cloudwatch_metric_alarm" "rds_cpu" {
   }
 }
 
+# ✅ COST-OPTIMIZED: RDS Memory Alarm (only if enable_all_alarms = true)
 resource "aws_cloudwatch_metric_alarm" "rds_freeable_memory" {
-  count = var.db_instance_id != "" ? 1 : 0
+  count = var.db_instance_id != "" && var.enable_all_alarms ? 1 : 0
   
   alarm_name          = "${var.project_name}-rds-memory-${var.environment}"
   comparison_operator = "LessThanThreshold"
@@ -124,8 +125,9 @@ resource "aws_cloudwatch_metric_alarm" "rds_freeable_memory" {
   }
 }
 
+# ✅ COST-OPTIMIZED: RDS Disk Queue (only if enable_all_alarms = true)
 resource "aws_cloudwatch_metric_alarm" "rds_disk_queue_depth" {
-  count = var.db_instance_id != "" ? 1 : 0
+  count = var.db_instance_id != "" && var.enable_all_alarms ? 1 : 0
   
   alarm_name          = "${var.project_name}-rds-disk-queue-${var.environment}"
   comparison_operator = "GreaterThanThreshold"
@@ -150,9 +152,9 @@ resource "aws_cloudwatch_metric_alarm" "rds_disk_queue_depth" {
   }
 }
 
-# Lambda Alarms
+# ✅ COST-OPTIMIZED: Lambda Alarms (only if enable_all_alarms = true)
 resource "aws_cloudwatch_metric_alarm" "lambda_errors" {
-  for_each = toset(var.lambda_function_names)
+  for_each = var.enable_all_alarms ? toset(var.lambda_function_names) : []
   
   alarm_name          = "${each.value}-errors-${var.environment}"
   comparison_operator = "GreaterThanThreshold"
@@ -179,7 +181,7 @@ resource "aws_cloudwatch_metric_alarm" "lambda_errors" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "lambda_throttles" {
-  for_each = toset(var.lambda_function_names)
+  for_each = var.enable_all_alarms ? toset(var.lambda_function_names) : []
   
   alarm_name          = "${each.value}-throttles-${var.environment}"
   comparison_operator = "GreaterThanThreshold"
@@ -205,9 +207,9 @@ resource "aws_cloudwatch_metric_alarm" "lambda_throttles" {
   }
 }
 
-# API Gateway Alarms
+# ✅ COST-OPTIMIZED: API Gateway Alarms (only if enable_all_alarms = true)
 resource "aws_cloudwatch_metric_alarm" "api_5xx_errors" {
-  count = var.api_gateway_name != "" ? 1 : 0
+  count = var.api_gateway_name != "" && var.enable_all_alarms ? 1 : 0
   
   alarm_name          = "${var.project_name}-api-5xx-errors-${var.environment}"
   comparison_operator = "GreaterThanThreshold"
@@ -234,7 +236,7 @@ resource "aws_cloudwatch_metric_alarm" "api_5xx_errors" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "api_4xx_errors" {
-  count = var.api_gateway_name != "" ? 1 : 0
+  count = var.api_gateway_name != "" && var.enable_all_alarms ? 1 : 0
   
   alarm_name          = "${var.project_name}-api-4xx-errors-${var.environment}"
   comparison_operator = "GreaterThanThreshold"
@@ -261,7 +263,7 @@ resource "aws_cloudwatch_metric_alarm" "api_4xx_errors" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "api_latency" {
-  count = var.api_gateway_name != "" ? 1 : 0
+  count = var.api_gateway_name != "" && var.enable_all_alarms ? 1 : 0
   
   alarm_name          = "${var.project_name}-api-latency-${var.environment}"
   comparison_operator = "GreaterThanThreshold"
@@ -287,7 +289,30 @@ resource "aws_cloudwatch_metric_alarm" "api_latency" {
   }
 }
 
-# CloudWatch Dashboard
+# ✅ COST-OPTIMIZED: CloudWatch Log Groups with retention control
+resource "aws_cloudwatch_log_group" "ecs_frontend" {
+  name              = "/ecs/${var.project_name}-frontend-${var.environment}"
+  retention_in_days = var.log_retention_days
+  
+  tags = {
+    Name        = "${var.project_name}-frontend-logs"
+    Environment = var.environment
+    CostCenter  = "monitoring"
+  }
+}
+
+resource "aws_cloudwatch_log_group" "ecs_backend" {
+  name              = "/ecs/${var.project_name}-backend-${var.environment}"
+  retention_in_days = var.log_retention_days
+  
+  tags = {
+    Name        = "${var.project_name}-backend-logs"
+    Environment = var.environment
+    CostCenter  = "monitoring"
+  }
+}
+
+# ✅ COST-OPTIMIZED: Dashboard (only if create_dashboard = true)
 resource "aws_cloudwatch_dashboard" "main" {
   count          = var.create_dashboard ? 1 : 0
   dashboard_name = "${var.project_name}-dashboard-${var.environment}"
@@ -364,7 +389,6 @@ resource "aws_cloudwatch_dashboard" "main" {
           }
         }
       ] : [
-        # Empty placeholder when no ECS services
         {
           type = "text"
           x    = 0
@@ -379,18 +403,18 @@ resource "aws_cloudwatch_dashboard" "main" {
           type = "text"
           x    = 0
           y    = 2
-          width = 24
-          height = 1
+          width = 12
+          height = 6
           properties = {
             markdown = "No ECS services to display"
           }
         },
         {
           type = "text"
-          x    = 0
-          y    = 3
-          width = 24
-          height = 1
+          x    = 12
+          y    = 2
+          width = 12
+          height = 6
           properties = {
             markdown = ""
           }
@@ -444,7 +468,38 @@ resource "aws_cloudwatch_dashboard" "main" {
             stat    = "Average"
           }
         }
-      ] : [],
+      ] : [
+        {
+          type = "text"
+          x    = 0
+          y    = 8
+          width = 24
+          height = 1
+          properties = {
+            markdown = "## RDS Database (None configured)"
+          }
+        },
+        {
+          type = "text"
+          x    = 0
+          y    = 9
+          width = 12
+          height = 6
+          properties = {
+            markdown = "No RDS instance to display"
+          }
+        },
+        {
+          type = "text"
+          x    = 12
+          y    = 9
+          width = 12
+          height = 6
+          properties = {
+            markdown = ""
+          }
+        }
+      ],
       # Lambda Widgets
       length(var.lambda_function_names) > 0 ? [
         {
@@ -521,7 +576,6 @@ resource "aws_cloudwatch_dashboard" "main" {
           }
         }
       ] : [
-        # Empty placeholder when no Lambda functions (must match 4 widgets)
         {
           type = "text"
           x    = 0
@@ -537,7 +591,7 @@ resource "aws_cloudwatch_dashboard" "main" {
           x    = 0
           y    = 16
           width = 8
-          height = 1
+          height = 6
           properties = {
             markdown = ""
           }
@@ -547,7 +601,7 @@ resource "aws_cloudwatch_dashboard" "main" {
           x    = 8
           y    = 16
           width = 8
-          height = 1
+          height = 6
           properties = {
             markdown = ""
           }
@@ -557,7 +611,7 @@ resource "aws_cloudwatch_dashboard" "main" {
           x    = 16
           y    = 16
           width = 8
-          height = 1
+          height = 6
           properties = {
             markdown = ""
           }
@@ -565,11 +619,6 @@ resource "aws_cloudwatch_dashboard" "main" {
       ]
     )
   })
-
-  tags = {
-    Name        = "${var.project_name}-dashboard"
-    Environment = var.environment
-  }
+  
+  # ❌ REMOVED: tags not supported by aws_cloudwatch_dashboard
 }
-
-# ✅ No outputs here - they're in outputs.tf
