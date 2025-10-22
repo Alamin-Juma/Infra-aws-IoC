@@ -1,3 +1,5 @@
+# modules/monitoring/main.tf
+
 # SNS Topic for alarms (always present in module)
 resource "aws_sns_topic" "alarms" {
   name = "${var.project_name}-alarms-${var.environment}"
@@ -467,23 +469,35 @@ locals {
       }
     },
     {
-      type = "text"
+      type = "metric"
       x    = 0
       y    = 9
       width  = 12
       height = 6
       properties = {
-        markdown = "No RDS instance to display"
+        metrics = []
+        view    = "timeSeries"
+        stacked = false
+        region  = "us-east-1"
+        title   = "RDS CPU Utilization (None configured)"
+        period  = 300
+        stat    = "Average"
       }
     },
     {
-      type = "text"
+      type = "metric"
       x    = 12
       y    = 9
       width  = 12
       height = 6
       properties = {
-        markdown = ""
+        metrics = []
+        view    = "timeSeries"
+        stacked = false
+        region  = "us-east-1"
+        title   = "RDS Freeable Memory (None configured)"
+        period  = 300
+        stat    = "Average"
       }
     }
   ]
