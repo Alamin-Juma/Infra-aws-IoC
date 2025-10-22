@@ -1,3 +1,54 @@
+variable "environment" {
+  description = "Environment name"
+  type        = string
+}
+
+variable "project_name" {
+  description = "Name of the project"
+  type        = string
+}
+
+variable "cluster_name" {
+  description = "Name of the ECS cluster"
+  type        = string
+}
+
+variable "service_names" {
+  description = "List of ECS service names"
+  type        = list(string)
+  default     = []
+}
+
+variable "db_instance_id" {
+  description = "ID of the RDS instance"
+  type        = string
+  default     = ""
+}
+
+variable "lambda_function_names" {
+  description = "List of Lambda function names"
+  type        = list(string)
+  default     = []
+}
+
+variable "api_gateway_name" {
+  description = "Name of the API Gateway"
+  type        = string
+  default     = ""
+}
+
+variable "create_dashboard" {
+  description = "Whether to create a CloudWatch dashboard"
+  type        = bool
+  default     = true
+}
+
+variable "notification_emails" {
+  description = "List of email addresses for notifications"
+  type        = list(string)
+  default     = []
+}
+
 # SNS Topic for alarms
 resource "aws_sns_topic" "alarms" {
   name = "${var.project_name}-alarms-${var.environment}"
@@ -468,15 +519,4 @@ resource "aws_cloudwatch_dashboard" "main" {
       ]
     )
   })
-}
-
-# Outputs
-output "alarms_topic_arn" {
-  description = "ARN of the SNS topic for alarms"
-  value       = aws_sns_topic.alarms.arn
-}
-
-output "dashboard_name" {
-  description = "Name of the CloudWatch dashboard"
-  value       = var.create_dashboard ? aws_cloudwatch_dashboard.main[0].dashboard_name : null
 }
