@@ -1,16 +1,3 @@
-# modules/monitoring/main.tf
-variable "project_name"        { type = string }
-variable "environment"         { type = string }
-variable "create_dashboard"    { type = bool, default = true }
-variable "service_names"       { type = list(string), default = [] }
-variable "cluster_name"        { type = string, default = "" }
-variable "db_instance_id"      { type = string, default = "" }
-variable "enable_all_alarms"   { type = bool, default = false }
-variable "lambda_function_names" { type = list(string), default = [] }
-variable "notification_emails" { type = list(string), default = [] }
-variable "api_gateway_name"    { type = string, default = "" }
-variable "log_retention_days"  { type = number, default = 30 }
-
 # SNS Topic for alarms (always present in module)
 resource "aws_sns_topic" "alarms" {
   name = "${var.project_name}-alarms-${var.environment}"
