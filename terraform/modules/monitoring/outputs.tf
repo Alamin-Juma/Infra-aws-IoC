@@ -1,20 +1,14 @@
-# modules/monitoring/outputs.tf
+output "ecs_log_group_name" {
+  description = "ECS log group name"
+  value       = aws_cloudwatch_log_group.ecs_logs.name
+}
+
 output "alarms_topic_arn" {
-  description = "SNS topic ARN for alarms"
+  description = "SNS Topic ARN for ECS alarms"
   value       = aws_sns_topic.alarms.arn
 }
 
-output "backend_log_group_name" {
-  description = "Backend CloudWatch Log Group name"
-  value       = aws_cloudwatch_log_group.ecs_backend.name
-}
-
-output "frontend_log_group_name" {
-  description = "Frontend CloudWatch Log Group name"
-  value       = aws_cloudwatch_log_group.ecs_frontend.name
-}
-
 output "dashboard_name" {
-  description = "CloudWatch dashboard name (if created)"
-  value       = length(aws_cloudwatch_dashboard.main) > 0 ? aws_cloudwatch_dashboard.main[0].dashboard_name : ""
+  description = "Global ECS CloudWatch dashboard name"
+  value       = var.create_dashboard ? aws_cloudwatch_dashboard.ecs_dashboard[0].dashboard_name : null
 }

@@ -1,31 +1,3 @@
-variable "vpc_id" {
-  description = "ID of the VPC"
-  type        = string
-}
-
-variable "environment" {
-  description = "Environment name"
-  type        = string
-}
-
-variable "project_name" {
-  description = "Name of the project"
-  type        = string
-}
-
-variable "allowed_ips" {
-  description = "List of allowed IPs for administrative access"
-  type        = list(string)
-  default     = ["0.0.0.0/0"]
-}
-
-variable "container_ports" {
-  description = "List of ports that containers use"
-  type        = list(number)
-  default     = [8080]
-}
-
-# Security Group for Load Balancer
 resource "aws_security_group" "lb" {
   name        = "${var.project_name}-lb-sg"
   description = "Controls access to the ALB"
@@ -199,28 +171,3 @@ resource "aws_security_group" "redis" {
   }
 }
 
-# Outputs
-output "lb_security_group_id" {
-  description = "ID of the load balancer security group"
-  value       = aws_security_group.lb.id
-}
-
-output "ecs_security_group_id" {
-  description = "ID of the ECS tasks security group"
-  value       = aws_security_group.ecs.id
-}
-
-output "db_security_group_id" {
-  description = "ID of the database security group"
-  value       = aws_security_group.db.id
-}
-
-output "lambda_security_group_id" {
-  description = "ID of the Lambda functions security group"
-  value       = aws_security_group.lambda.id
-}
-
-output "redis_security_group_id" {
-  description = "ID of the Redis security group"
-  value       = aws_security_group.redis.id
-}

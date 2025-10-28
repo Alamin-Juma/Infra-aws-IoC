@@ -1,69 +1,3 @@
-variable "project_name" {
-  description = "Name of the project"
-  type        = string
-}
-
-variable "environment" {
-  description = "Environment name"
-  type        = string
-}
-
-variable "lb_domain_name" {
-  description = "Domain name of the load balancer for API origin"
-  type        = string
-}
-
-variable "s3_domain_name" {
-  description = "Domain name of the S3 bucket for static assets origin"
-  type        = string
-}
-
-variable "cache_settings" {
-  description = "Cache settings for different paths"
-  type = map(object({
-    min_ttl     = number
-    default_ttl = number
-    max_ttl     = number
-  }))
-  default = {
-    static = {
-      min_ttl     = 86400    # 1 day
-      default_ttl = 604800   # 1 week
-      max_ttl     = 31536000 # 1 year
-    }
-    dynamic = {
-      min_ttl     = 0
-      default_ttl = 0
-      max_ttl     = 86400    # 1 day
-    }
-  }
-}
-
-variable "allowed_methods" {
-  description = "HTTP methods to allow"
-  type        = list(string)
-  default     = ["GET", "HEAD"]
-}
-
-variable "acm_certificate_arn" {
-  description = "ARN of the ACM certificate for CloudFront"
-  type        = string
-  default     = ""
-}
-
-variable "domain_names" {
-  description = "Domain names for the CloudFront distribution"
-  type        = list(string)
-  default     = []
-}
-
-variable "price_class" {
-  description = "CloudFront price class"
-  type        = string
-  default     = "PriceClass_100" # Use PriceClass_All for global presence
-}
-
-# Origin Request Policy for API
 resource "aws_cloudfront_origin_request_policy" "api" {
   name    = "${var.project_name}-api-origin-request-policy"
   comment = "Origin Request Policy for API endpoints"
@@ -294,7 +228,7 @@ resource "aws_cloudfront_origin_access_identity" "main" {
 data "aws_iam_policy_document" "s3_cloudfront_access" {
   statement {
     actions   = ["s3:GetObject"]
-    resources = ["arn:aws:s3:::${var.s3_domain_name}/*"]
+    resources = ["${var.s3_bucket_arn}/*"]
     
     principals {
       type        = "AWS"
@@ -303,28 +237,9 @@ data "aws_iam_policy_document" "s3_cloudfront_access" {
   }
 }
 
-# Outputs
-output "distribution_id" {
-  description = "ID of the CloudFront distribution"
-  value       = aws_cloudfront_distribution.main.id
+# Apply the bucket policy to S3
+resource "aws_s3_bucket_policy" "cloudfront_access" {
+  bucket = var.s3_bucket_id
+  policy = data.aws_iam_policy_document.s3_cloudfront_access.json
 }
 
-output "domain_name" {
-  description = "Domain name of the CloudFront distribution"
-  value       = aws_cloudfront_distribution.main.domain_name
-}
-
-output "hosted_zone_id" {
-  description = "Route 53 hosted zone ID of the CloudFront distribution"
-  value       = aws_cloudfront_distribution.main.hosted_zone_id
-}
-
-output "origin_access_identity" {
-  description = "CloudFront Origin Access Identity"
-  value       = aws_cloudfront_origin_access_identity.main.cloudfront_access_identity_path
-}
-
-output "s3_policy_document" {
-  description = "IAM policy document for S3 bucket"
-  value       = data.aws_iam_policy_document.s3_cloudfront_access.json
-}

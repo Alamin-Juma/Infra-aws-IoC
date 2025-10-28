@@ -1,48 +1,3 @@
-variable "project_name" {
-  description = "Name of the project"
-  type        = string
-}
-
-variable "environment" {
-  description = "Environment name"
-  type        = string
-}
-
-variable "bucket_name" {
-  description = "Name of the S3 bucket"
-  type        = string
-}
-
-variable "enable_website" {
-  description = "Enable static website hosting"
-  type        = bool
-  default     = false
-}
-
-variable "cors_allowed_origins" {
-  description = "List of CORS allowed origins"
-  type        = list(string)
-  default     = ["*"]
-}
-
-variable "lifecycle_rules" {
-  description = "Lifecycle rules for the S3 bucket"
-  type = list(object({
-    id                                     = string
-    enabled                                = bool
-    prefix                                 = optional(string)
-    expiration_days                        = optional(number)
-    noncurrent_version_expiration_days     = optional(number)
-    abort_incomplete_multipart_upload_days = optional(number)
-    transition_rules = optional(list(object({
-      days          = number
-      storage_class = string
-    })))
-  }))
-  default = []
-}
-
-# S3 Bucket
 resource "aws_s3_bucket" "main" {
   bucket = var.bucket_name
   
@@ -172,28 +127,3 @@ resource "aws_s3_bucket_lifecycle_configuration" "main" {
   }
 }
 
-# Outputs
-output "bucket_id" {
-  description = "ID of the S3 bucket"
-  value       = aws_s3_bucket.main.id
-}
-
-output "bucket_arn" {
-  description = "ARN of the S3 bucket"
-  value       = aws_s3_bucket.main.arn
-}
-
-output "bucket_domain_name" {
-  description = "Domain name of the S3 bucket"
-  value       = aws_s3_bucket.main.bucket_regional_domain_name
-}
-
-output "website_endpoint" {
-  description = "Website endpoint of the S3 bucket"
-  value       = var.enable_website ? aws_s3_bucket_website_configuration.main[0].website_endpoint : null
-}
-
-output "website_domain" {
-  description = "Website domain of the S3 bucket"
-  value       = var.enable_website ? aws_s3_bucket_website_configuration.main[0].website_domain : null
-}

@@ -1,31 +1,3 @@
-variable "environment" {
-  description = "Environment name"
-  type        = string
-}
-
-variable "project_name" {
-  description = "Name of the project"
-  type        = string
-}
-
-variable "api_gateway_arn" {
-  description = "ARN of the API Gateway to protect"
-  type        = string
-}
-
-variable "allowed_countries" {
-  description = "List of allowed country codes (ISO 3166-1 alpha-2)"
-  type        = list(string)
-  default     = ["US", "CA", "GB", "AU"]
-}
-
-variable "rate_limit" {
-  description = "Rate limit per 5-minute window"
-  type        = number
-  default     = 10000
-}
-
-# WAF Web ACL
 resource "aws_wafv2_web_acl" "api_protection" {
   name  = "${var.project_name}-api-waf-${var.environment}"
   scope = "REGIONAL"
@@ -187,13 +159,3 @@ resource "aws_wafv2_web_acl_logging_configuration" "waf_logging" {
   log_destination_configs = [aws_cloudwatch_log_group.waf_logs.arn]
 }
 
-# Outputs
-output "web_acl_id" {
-  description = "The ID of the WAF WebACL"
-  value       = aws_wafv2_web_acl.api_protection.id
-}
-
-output "web_acl_arn" {
-  description = "The ARN of the WAF WebACL"
-  value       = aws_wafv2_web_acl.api_protection.arn
-}

@@ -1,6 +1,14 @@
-# modules/monitoring/main.tf
+resource "aws_cloudwatch_log_group" "ecs_logs" {
+  name              = "/ecs/${var.project_name}-${var.environment}"
+  retention_in_days = 7
 
-# SNS Topic for alarms (always present in module)
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+  }
+}
+
+# SNS Topic for Alarms
 resource "aws_sns_topic" "alarms" {
   name = "${var.project_name}-alarms-${var.environment}"
 
@@ -10,7 +18,7 @@ resource "aws_sns_topic" "alarms" {
   }
 }
 
-# SNS Topic subscriptions for email notifications (if any)
+# SNS Topic Subscriptions
 resource "aws_sns_topic_subscription" "email_subscriptions" {
   count     = length(var.notification_emails)
   topic_arn = aws_sns_topic.alarms.arn
@@ -18,159 +26,52 @@ resource "aws_sns_topic_subscription" "email_subscriptions" {
   endpoint  = var.notification_emails[count.index]
 }
 
-# CloudWatch Log Groups (always present so outputs can safely reference)
-resource "aws_cloudwatch_log_group" "ecs_frontend" {
-  name              = "/ecs/${var.project_name}-frontend-${var.environment}"
-  retention_in_days = var.log_retention_days
-
-  tags = {
-    Name        = "${var.project_name}-frontend-logs"
-    Environment = var.environment
-    CostCenter  = "monitoring"
-  }
-}
-
-resource "aws_cloudwatch_log_group" "ecs_backend" {
-  name              = "/ecs/${var.project_name}-backend-${var.environment}"
-  retention_in_days = var.log_retention_days
-
-  tags = {
-    Name        = "${var.project_name}-backend-logs"
-    Environment = var.environment
-    CostCenter  = "monitoring"
-  }
-}
-
-# ECS alarms (only created when enable_all_alarms = true)
-resource "aws_cloudwatch_metric_alarm" "ecs_cpu" {
-  for_each = var.enable_all_alarms ? toset(var.service_names) : toset([])
-  alarm_name          = "${each.value}-cpu-${var.environment}"
+# ECS Combined CPU Alarm
+resource "aws_cloudwatch_metric_alarm" "ecs_combined_cpu" {
+  alarm_name          = "${var.project_name}-ecs-high-cpu-${var.environment}"
   comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = 3
+  evaluation_periods  = var.alarm_evaluation_periods
   metric_name         = "CPUUtilization"
   namespace           = "AWS/ECS"
-  period              = 300
+  period              = var.alarm_period
   statistic           = "Average"
-  threshold           = 80
-  alarm_description   = "CPU utilization is too high for service ${each.value}"
+  threshold           = var.cpu_threshold
+  alarm_description   = "This metric monitors ECS CPU utilization"
+  alarm_actions       = [aws_sns_topic.alarms.arn]
 
   dimensions = {
     ClusterName = var.cluster_name
-    ServiceName = each.value
   }
 
-  alarm_actions = [aws_sns_topic.alarms.arn]
-  ok_actions    = [aws_sns_topic.alarms.arn]
-
   tags = {
-    Name        = "${each.value}-cpu-alarm"
+    Name        = "${var.project_name}-ecs-cpu-alarm"
     Environment = var.environment
   }
 }
 
-resource "aws_cloudwatch_metric_alarm" "ecs_memory" {
-  for_each = var.enable_all_alarms ? toset(var.service_names) : toset([])
-  alarm_name          = "${each.value}-memory-${var.environment}"
-  comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = 3
-  metric_name         = "MemoryUtilization"
-  namespace           = "AWS/ECS"
-  period              = 300
-  statistic           = "Average"
-  threshold           = 80
-  alarm_description   = "Memory utilization is too high for service ${each.value}"
+# CloudWatch Dashboard
+resource "aws_cloudwatch_dashboard" "ecs_dashboard" {
+  dashboard_name = "${var.project_name}-ecs-${var.environment}"
 
-  dimensions = {
-    ClusterName = var.cluster_name
-    ServiceName = each.value
-  }
-
-  alarm_actions = [aws_sns_topic.alarms.arn]
-  ok_actions    = [aws_sns_topic.alarms.arn]
-
-  tags = {
-    Name        = "${each.value}-memory-alarm"
-    Environment = var.environment
-  }
+  dashboard_body = jsonencode({
+    widgets = [
+      {
+        type = "metric"
+        properties = {
+          metrics = [
+            ["AWS/ECS", "CPUUtilization", { stat = "Average" }],
+            [".", "MemoryUtilization", { stat = "Average" }]
+          ]
+          period = 300
+          stat   = "Average"
+          region = "us-east-1"
+          title  = "ECS Metrics"
+        }
+      }
+    ]
+  })
 }
 
-# RDS alarms controlled by db_instance_id and enable_all_alarms
-resource "aws_cloudwatch_metric_alarm" "rds_cpu" {
-  count = var.db_instance_id != "" ? 1 : 0
 
-  alarm_name          = "${var.project_name}-rds-cpu-${var.environment}"
-  comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = 3
-  metric_name         = "CPUUtilization"
-  namespace           = "AWS/RDS"
-  period              = 300
-  statistic           = "Average"
-  threshold           = 80
-  alarm_description   = "CPU utilization is too high for RDS instance"
 
-  dimensions = {
-    DBInstanceIdentifier = var.db_instance_id
-  }
 
-  alarm_actions = [aws_sns_topic.alarms.arn]
-  ok_actions    = [aws_sns_topic.alarms.arn]
-
-  tags = {
-    Name        = "${var.project_name}-rds-cpu-alarm"
-    Environment = var.environment
-  }
-}
-
-resource "aws_cloudwatch_metric_alarm" "rds_freeable_memory" {
-  count = var.db_instance_id != "" && var.enable_all_alarms ? 1 : 0
-
-  alarm_name          = "${var.project_name}-rds-memory-${var.environment}"
-  comparison_operator = "LessThanThreshold"
-  evaluation_periods  = 3
-  metric_name         = "FreeableMemory"
-  namespace           = "AWS/RDS"
-  period              = 300
-  statistic           = "Average"
-  threshold           = 1000000000  # 1GB in bytes
-  alarm_description   = "Freeable memory is too low for RDS instance"
-
-  dimensions = {
-    DBInstanceIdentifier = var.db_instance_id
-  }
-
-  alarm_actions = [aws_sns_topic.alarms.arn]
-  ok_actions    = [aws_sns_topic.alarms.arn]
-
-  tags = {
-    Name        = "${var.project_name}-rds-memory-alarm"
-    Environment = var.environment
-  }
-}
-
-resource "aws_cloudwatch_metric_alarm" "rds_disk_queue_depth" {
-  count = var.db_instance_id != "" && var.enable_all_alarms ? 1 : 0
-
-  alarm_name          = "${var.project_name}-rds-disk-queue-${var.environment}"
-  comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = 3
-  metric_name         = "DiskQueueDepth"
-  namespace           = "AWS/RDS"
-  period              = 300
-  statistic           = "Average"
-  threshold           = 10
-  alarm_description   = "Disk queue depth is too high for RDS instance"
-
-  dimensions = {
-    DBInstanceIdentifier = var.db_instance_id
-  }
-
-  alarm_actions = [aws_sns_topic.alarms.arn]
-  ok_actions    = [aws_sns_topic.alarms.arn]
-
-  tags = {
-    Name        = "${var.project_name}-rds-disk-queue-alarm"
-    Environment = var.environment
-  }
-}
-
-# Lambda alarms

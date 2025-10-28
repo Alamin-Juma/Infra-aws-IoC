@@ -18,7 +18,7 @@ variable "environment" {
 variable "project_name" {
   description = "Name of the project"
   type        = string
-  default     = "prodready-infra"
+  default     = "itrack"
 }
 
 variable "vpc_cidr" {
@@ -94,7 +94,7 @@ variable "dynamodb_tables" {
   }))
   default = [
     {
-      name           = "prodready-infra-items"
+      name           = "itrack-items"
       hash_key       = "id"
       range_key      = ""
       billing_mode   = "PAY_PER_REQUEST"
@@ -149,14 +149,14 @@ variable "lambda_functions" {
   }))
   default = [
     {
-      name        = "prodready-infra-api-handler"
+      name        = "itrack-api-handler"
       runtime     = "nodejs16.x"
       handler     = "index.handler"
       timeout     = 30
       memory_size = 128
-      zip_file    = "../lambda/prodready-infra-api-handler.zip"
+      zip_file    = "../lambda/itrack-api-handler.zip"
       environment_variables = {
-        DYNAMODB_TABLE = "prodready-infra-items"
+        DYNAMODB_TABLE = "itrack-items"
       }
     }
   ]
@@ -274,39 +274,23 @@ variable "sensitive_secrets" {
     }
   }
 }
-
-variable "log_retention_days" {
-  description = "CloudWatch log retention in days"
-  type        = number
-  default     = 7
+# Application Environment Variables
+variable "jwt_secret" {
+  description = "JWT secret for authentication"
+  type        = string
+  sensitive   = true
+  default     = ""
 }
 
-variable "enable_s3_log_archive" {
-  description = "Enable S3 log archiving"
-  type        = bool
-  default     = false
+variable "admin_email" {
+  description = "Admin email for initial setup"
+  type        = string
+  default     = "admin@itrack.com"
 }
 
-variable "s3_log_transition_days" {
-  description = "Days before moving logs to S3"
-  type        = number
-  default     = 7
-}
-
-variable "s3_log_expiration_days" {
-  description = "Days before deleting logs"
-  type        = number
-  default     = 90
-}
-
-variable "enable_detailed_monitoring" {
-  description = "Enable detailed monitoring"
-  type        = bool
-  default     = false
-}
-
-variable "enable_all_alarms" {
-  description = "Enable all alarms (vs critical only)"
-  type        = bool
-  default     = true
+variable "admin_password" {
+  description = "Admin password for initial setup"
+  type        = string
+  sensitive   = true
+  default     = ""
 }

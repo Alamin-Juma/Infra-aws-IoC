@@ -9,8 +9,8 @@ terraform {
   required_version = ">= 1.3.0"
 
   backend "s3" {
-    bucket = "prodready-infra-terraform-state-875486186130"
-    key    = "prodready-infra/production/terraform.tfstate"
+    bucket = "itrack-terraform-state-875486186130"
+    key    = "itrack/production/terraform.tfstate"
     region = "us-east-1"
     # Enable DynamoDB state locking
     dynamodb_table = "terraform-state-lock-production"
@@ -22,7 +22,7 @@ provider "aws" {
   region = var.aws_region
   default_tags {
     tags = {
-      Project     = "ProdReady_Infra"
+      Project     = "ITrack"
       Environment = var.environment
       ManagedBy   = "Terraform"
     }
@@ -35,7 +35,7 @@ provider "aws" {
   region = var.cross_region_backup_region
   default_tags {
     tags = {
-      Project     = "ProdReady_Infra"
+      Project     = "ITrack"
       Environment = var.environment
       ManagedBy   = "Terraform"
     }
@@ -81,25 +81,25 @@ module "ecr" {
   environment = var.environment
 }
 
-# Cognito for Authentication
-module "cognito" {
-  source = "./modules/cognito"
-  
-  user_pool_name  = "${var.project_name}-user-pool"
-  environment     = var.environment
-  project_name    = var.project_name
-  allowed_domains = var.allowed_domains
-}
+# Cognito for Authentication (disabled - module not yet created)
+# module "cognito" {
+#   source = "./modules/cognito"
+#   
+#   user_pool_name  = "${var.project_name}-user-pool"
+#   environment     = var.environment
+#   project_name    = var.project_name
+#   allowed_domains = var.allowed_domains
+# }
 
-# API Gateway
-module "api_gateway" {
-  source = "./modules/api_gateway"
-  
-  name         = "${var.project_name}-api"
-  environment  = var.environment
-  cognito_arn  = module.cognito.user_pool_arn
-  depends_on   = [module.cognito]
-}
+# API Gateway - DISABLED (not needed for ECS backend)
+# module "api_gateway" {
+#   source = "./modules/api_gateway"
+#   
+#   name         = "${var.project_name}-api"
+#   environment  = var.environment
+#   cognito_arn  = "" # module.cognito.user_pool_arn
+#   # depends_on   = [module.cognito]
+# }
 
 # DynamoDB Tables
 module "dynamodb" {
@@ -125,23 +125,23 @@ module "rds" {
   multi_az              = var.environment == "production" ? true : false
 }
 
-# Lambda Functions
-module "lambda" {
-  source = "./modules/lambda"
-  
-  environment     = var.environment
-  project_name    = var.project_name
-  vpc_id          = module.vpc.vpc_id
-  subnet_ids      = module.vpc.private_subnets
-  security_group_ids = [module.security_groups.lambda_security_group_id]
-  lambda_functions = var.lambda_functions
-  dynamo_table_arns = values(module.dynamodb.table_arns)
-  api_gateway_id    = module.api_gateway.api_id
-  api_gateway_root_resource_id = module.api_gateway.api_resource_id
-  aws_region        = var.aws_region
-  aws_account_id    = var.aws_account_id
-  cognito_authorizer_id = module.api_gateway.authorizer_id
-}
+# Lambda Functions - DISABLED (not needed, using ECS backend directly)
+# module "lambda" {
+#   source = "./modules/lambda"
+#   
+#   environment     = var.environment
+#   project_name    = var.project_name
+#   vpc_id          = module.vpc.vpc_id
+#   subnet_ids      = module.vpc.private_subnets
+#   security_group_ids = [module.security_groups.lambda_security_group_id]
+#   lambda_functions = var.lambda_functions
+#   dynamo_table_arns = values(module.dynamodb.table_arns)
+#   api_gateway_id    = module.api_gateway.api_id
+#   api_gateway_root_resource_id = module.api_gateway.api_resource_id
+#   aws_region        = var.aws_region
+#   aws_account_id    = var.aws_account_id
+#   cognito_authorizer_id = "" # module.api_gateway.authorizer_id
+# }
 
 # ECS Cluster, Services and Task Definitions
 module "ecs" {
@@ -164,33 +164,41 @@ module "ecs" {
   memory             = var.ecs_memory
   health_check_path  = var.health_check_path
   cloudwatch_logs    = true
-  database_url       = "postgresql://postgres:${var.db_password}@${module.rds.db_instance_endpoint}/prodready_infra_${var.environment}"
+  database_url       = "postgresql://${var.db_username}:${var.db_password}@${module.rds.db_instance_endpoint}/${var.db_name}"
+  db_host            = split(":", module.rds.db_instance_endpoint)[0]
+  db_name            = var.db_name
+  db_user            = var.db_username
+  db_password        = var.db_password
+  jwt_secret         = var.jwt_secret
+  admin_email        = var.admin_email
+  admin_password     = var.admin_password
+  certificate_arn    = var.acm_certificate_arn
 }
 
 # CloudWatch Monitoring and Alarms (disabled for initial deployment)
-module "monitoring" {
-  source = "./modules/monitoring"
-  
-  environment      = var.environment
-  project_name     = var.project_name
-  cluster_name     = module.ecs.cluster_name
-  service_names    = [
-    "${var.project_name}-backend-service-${var.environment}",
-    "${var.project_name}-frontend-service-${var.environment}"
-  ]
-  db_instance_id   = module.rds.db_instance_id
-  
-  # NEW: Cost optimization variables
-  log_retention_days         = var.log_retention_days
-  enable_s3_log_archive      = var.enable_s3_log_archive
-  s3_log_transition_days     = var.s3_log_transition_days
-  s3_log_expiration_days     = var.s3_log_expiration_days
-  enable_detailed_monitoring = var.enable_detailed_monitoring
-  enable_all_alarms          = var.enable_all_alarms
-  
-  notification_emails = var.notification_emails
-  create_dashboard    = true
-}
+# module "monitoring" {
+#   source = "./modules/monitoring"
+#   
+#   environment   = var.environment
+#   project_name  = var.project_name
+#   
+#   # ECS Alarms
+#   cluster_name  = module.ecs.cluster_name
+#   service_names = module.ecs.service_names
+#   
+#   # RDS Alarms
+#   db_instance_id = module.rds.db_instance_id
+#   
+#   # Lambda Alarms
+#   lambda_function_names = module.lambda.function_names
+#   
+#   # API Gateway Alarms
+#   api_gateway_name = module.api_gateway.api_name
+#   
+#   # Create appropriate dashboards and alerts
+#   create_dashboard = true
+#   notification_emails = var.notification_emails
+# }
 
 # S3 Bucket for Frontend Assets (if needed)
 module "s3_hosting" {
@@ -212,6 +220,8 @@ module "cloudfront" {
   # Origins
   lb_domain_name   = module.ecs.lb_dns_name
   s3_domain_name   = module.s3_hosting.bucket_domain_name
+  s3_bucket_id     = module.s3_hosting.bucket_id
+  s3_bucket_arn    = module.s3_hosting.bucket_arn
   
   # Cache policies
   cache_settings   = var.cloudfront_cache_settings
@@ -265,61 +275,4 @@ module "backup" {
   }
   
   depends_on = [module.rds, module.dynamodb]
-}
-
-# Outputs - Add these at the end
-output "cluster_name" {
-  description = "Name of the ECS cluster"
-  value       = module.ecs.cluster_name
-}
-
-output "cluster_id" {
-  description = "ID of the ECS cluster"
-  value       = module.ecs.cluster_id
-}
-
-output "backend_service_name" {
-  description = "Name of the backend ECS service"
-  value       = module.ecs.backend_service_name
-}
-
-output "frontend_service_name" {
-  description = "Name of the frontend ECS service"
-  value       = module.ecs.frontend_service_name
-}
-
-output "lb_dns_name" {
-  description = "DNS name of the load balancer"
-  value       = module.ecs.lb_dns_name
-}
-
-output "lb_arn" {
-  description = "ARN of the load balancer"
-  value       = module.ecs.lb_arn
-}
-
-output "vpc_id" {
-  description = "VPC ID"
-  value       = module.vpc.vpc_id
-}
-
-output "ecr_backend_repository_url" {
-  description = "ECR repository URL for backend"
-  value       = module.ecr.repository_urls["${var.project_name}-api"]
-}
-
-output "ecr_frontend_repository_url" {
-  description = "ECR repository URL for frontend"
-  value       = module.ecr.repository_urls["${var.project_name}-ui"]
-}
-
-output "cloudfront_domain_name" {
-  description = "CloudFront distribution domain name"
-  value       = module.cloudfront.domain_name
-}
-
-output "rds_endpoint" {
-  description = "RDS database endpoint"
-  value       = module.rds.db_instance_endpoint
-  sensitive   = true
 }
